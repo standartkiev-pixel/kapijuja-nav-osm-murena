@@ -230,6 +230,12 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `resetApiConfigurationsToDefaults should call repository reset`() {
+        viewModel.resetApiConfigurationsToDefaults()
+        verify { mockAppPreferenceRepository.resetApiConfigurationsToDefaults() }
+    }
+
+    @Test
     fun `continuousLocationTracking should reflect repository state`() = runTest {
         val expectedFlow = MutableStateFlow(true)
         every { mockAppPreferenceRepository.continuousLocationTracking } returns expectedFlow
