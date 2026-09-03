@@ -1,0 +1,82 @@
+name: Diagnose Stadia vehicle routing v2
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnose-stadia-vehicle-routing-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Probe fixed vehicle requests
+        shell: bash
+        env:
+          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STADIA_KEY"
+          OUT="diagnostics/stadia-vehicle-routing-v2-2026-09-03.txt"
+          mkdir -p diagnostics
+          : > "$OUT"
+
+          probe() {
+            name="$1"
+            json="$2"
+            body="$(mktemp)"
+            code="$(curl -sS -o "$body" -w '%{http_code}' -H 'Content-Type: application/json' --data "$json" "https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}")"
+            {
+              echo "=== $name ==="
+              echo "HTTP $code"
+              if [ "$code" = "200" ]; then
+                python3 - "$body" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1]))
+if 'routes' in p:
+    r=p['routes'][0]
+    print(json.dumps({'code':p.get('code'),'weight_name':r.get('weight_name'),'distance':r.get('distance'),'duration':r.get('duration')}, ensure_ascii=False))
+else:
+    t=p.get('trip',{})
+    print(json.dumps({'status':t.get('status'),'status_message':t.get('status_message'),'summary':t.get('summary')}, ensure_ascii=False))
+PY
+              else
+                cat "$body"
+                echo
+              fi
+              echo
+            } >> "$OUT"
+            rm -f "$body"
+          }
+
+          USER='"locations":[{"lat":52.44156712,"lon":16.7658691},{"lat":52.355681,"lon":16.94207}]'
+          START_TO_HW='"locations":[{"lat":52.44156712,"lon":16.7658691},{"lat":52.350374,"lon":16.788772}]'
+          HW_TO_DEST='"locations":[{"lat":52.350374,"lon":16.788772},{"lat":52.355681,"lon":16.94207}]'
+          HW='"locations":[{"lat":52.350374,"lon":16.788772},{"lat":52.350287,"lon":16.829985}]'
+
+          probe bus_full_int "{${USER},\"costing\":\"bus\",\"costing_options\":{\"bus\":{\"gate_cost\":45,\"toll_booth_cost\":30,\"exclude_unpaved\":true,\"height\":3.93,\"width\":2.51,\"length\":13.15,\"weight\":15.94}},\"format\":\"osrm\",\"banner_instructions\":true,\"voice_instructions\":true,\"alternates\":5}"
+          probe auto_coach_dims "{${USER},\"costing\":\"auto\",\"costing_options\":{\"auto\":{\"gate_cost\":45,\"toll_booth_cost\":30,\"exclude_unpaved\":true,\"height\":3.93,\"width\":2.51,\"length\":13.15,\"weight\":15.94}},\"format\":\"osrm\"}"
+
+          probe truck_user_int "{${USER},\"costing\":\"truck\",\"costing_options\":{\"truck\":{\"gate_cost\":45,\"toll_booth_cost\":30}},\"format\":\"osrm\"}"
+          probe truck_start_to_highway "{${START_TO_HW},\"costing\":\"truck\",\"costing_options\":{\"truck\":{\"gate_cost\":45,\"toll_booth_cost\":30}},\"format\":\"osrm\"}"
+          probe truck_highway_to_dest "{${HW_TO_DEST},\"costing\":\"truck\",\"costing_options\":{\"truck\":{\"gate_cost\":45,\"toll_booth_cost\":30}},\"format\":\"osrm\"}"
+          probe truck_highway_only "{${HW},\"costing\":\"truck\",\"costing_options\":{\"truck\":{\"gate_cost\":45,\"toll_booth_cost\":30}},\"format\":\"osrm\"}"
+
+          cat "$OUT"
+
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Kapijuja Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add diagnostics/stadia-vehicle-routing-v2-2026-09-03.txt
+          git commit -m "Record Stadia vehicle routing v2 diagnostic" || exit 0
+          git push
