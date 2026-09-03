@@ -42,8 +42,15 @@ import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val TAG = "ValhallaRouting"
+private const val TRUCK_WAYPOINT_RADIUS_METERS = 100
 
 class ValhallaRoutingService(
     private val appPreferenceRepository: AppPreferenceRepository,
@@ -85,16 +92,17 @@ class ValhallaRoutingService(
             } else {
                 config.baseUrl
             }
+            val outboundRequest = prepareVehicleRouteRequest(request)
             routeNetworkDiagnostics.logRouteRequest(
                 endpoint = config.baseUrl,
                 config = { config.toDebugLogString() },
-                requestBody = { request }
+                requestBody = { outboundRequest }
             )
 
             val response = client.post {
                 url(url)
                 contentType(ContentType.Application.Json)
-                setBody(request)
+                setBody(outboundRequest)
             }
             val responseBody: String = response.body()
 
@@ -123,6 +131,49 @@ class ValhallaRoutingService(
             } else {
                 HttpRequestException(failure, e)
             }
+        }
+    }
+
+    /**
+     * Valhalla normally correlates a waypoint to the single closest edge when radius is zero.
+     * For truck routing this can make a perfectly reachable geographic destination unroutable
+     * when the closest edge itself has HGV access restrictions. A small candidate radius lets
+     * Valhalla choose a nearby edge which is actually legal for the truck costing model.
+     *
+     * This does NOT disable or soften truck restrictions: the costing model still decides
+     * which candidate edges are legal. It only broadens waypoint-to-road correlation.
+     */
+    private fun prepareVehicleRouteRequest(request: String): String {
+        return try {
+            val root = Json.parseToJsonElement(request).jsonObject
+            val costing = root["costing"]?.jsonPrimitive?.content ?: return request
+            if (costing != TruckRoutingOptions.COSTING_TYPE_TRUCK) {
+                return request
+            }
+
+            val locations = root["locations"]?.jsonArray ?: return request
+            val updatedLocations = locations.map { locationElement ->
+                val location = locationElement.jsonObject
+                if (location.containsKey("radius")) {
+                    locationElement
+                } else {
+                    JsonObject(
+                        location.toMutableMap().apply {
+                            put("radius", JsonPrimitive(TRUCK_WAYPOINT_RADIUS_METERS))
+                        }
+                    )
+                }
+            }
+
+            JsonObject(
+                root.toMutableMap().apply {
+                    put("locations", JsonArray(updatedLocations))
+                }
+            ).toString()
+        } catch (_: Exception) {
+            // Ferrostar currently emits valid JSON, but routing should never fail only because
+            // this compatibility normalization could not parse a future request shape.
+            request
         }
     }
 }
