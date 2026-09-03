@@ -1,0 +1,75 @@
+name: Diagnose Stadia truck and bus routing
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnose-stadia-vehicle-routing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Probe Stadia route variants
+        shell: bash
+        env:
+          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STADIA_KEY"
+          OUT="diagnostics/stadia-vehicle-routing-2026-09-03.txt"
+          mkdir -p diagnostics
+          : > "$OUT"
+
+          probe() {
+            name="$1"
+            json="$2"
+            body="$(mktemp)"
+            code="$(curl -sS -o "$body" -w '%{http_code}' \
+              -H 'Content-Type: application/json' \
+              --data "$json" \
+              "https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}")"
+            {
+              echo "=== $name ==="
+              echo "HTTP $code"
+              cat "$body"
+              echo
+              echo
+            } >> "$OUT"
+            rm -f "$body"
+          }
+
+          LOC='"locations":[{"lat":52.44156712,"lon":16.7658691},{"lat":52.355681,"lon":16.94207}]'
+
+          probe auto_min "{${LOC},\"costing\":\"auto\"}"
+          probe bicycle_min "{${LOC},\"costing\":\"bicycle\"}"
+          probe truck_min "{${LOC},\"costing\":\"truck\"}"
+          probe bus_min "{${LOC},\"costing\":\"bus\"}"
+
+          probe truck_osrm "{${LOC},\"costing\":\"truck\",\"format\":\"osrm\"}"
+          probe bus_osrm "{${LOC},\"costing\":\"bus\",\"format\":\"osrm\"}"
+
+          probe truck_nav "{${LOC},\"costing\":\"truck\",\"format\":\"osrm\",\"banner_instructions\":true,\"voice_instructions\":true,\"alternates\":5}"
+          probe bus_nav "{${LOC},\"costing\":\"bus\",\"format\":\"osrm\",\"banner_instructions\":true,\"voice_instructions\":true,\"alternates\":5}"
+
+          probe truck_full '{"alternates":5,"banner_instructions":true,"costing":"truck","costing_options":{"truck":{"gate_cost":45.0,"toll_booth_cost":30.0}},"filters":{"action":"include","attributes":["shape_attributes.speed","shape_attributes.speed_limit","shape_attributes.time","shape_attributes.length"]},"format":"osrm","locations":[{"lat":52.44156712,"lon":16.7658691,"street_side_tolerance":10},{"lat":52.355681,"lon":16.94207,"type":"break"}],"voice_instructions":true}'
+          probe bus_full '{"alternates":5,"banner_instructions":true,"costing":"bus","costing_options":{"bus":{"exclude_unpaved":true,"gate_cost":45.0,"height":3.93,"length":13.15,"toll_booth_cost":30.0,"weight":15.94,"width":2.51}},"filters":{"action":"include","attributes":["shape_attributes.speed","shape_attributes.speed_limit","shape_attributes.time","shape_attributes.length"]},"format":"osrm","locations":[{"lat":52.44156712,"lon":16.7658691,"street_side_tolerance":10},{"lat":52.355681,"lon":16.94207,"type":"break"}],"voice_instructions":true}'
+
+          cat "$OUT"
+
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Kapijuja Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add diagnostics/stadia-vehicle-routing-2026-09-03.txt
+          git commit -m "Record Stadia truck/bus routing diagnostic" || exit 0
+          git push
