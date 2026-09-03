@@ -100,8 +100,9 @@ class FerrostarWrapper(
             context = context,
             DefaultForegroundNotificationBuilder(context)
         )
+
     @OptIn(ExperimentalTime::class)
-    private val locationProvider = object: LocationProvider {
+    private val locationProvider = object : LocationProvider {
         private val listeners = mutableListOf<LocationUpdateListener>()
 
         override val lastLocation: UserLocation?
@@ -139,6 +140,7 @@ class FerrostarWrapper(
             listeners.remove(listener)
         }
     }
+
     private var previousRouteOptions: RoutingOptions? =
         routingOptions ?: routingProfileRepository.createDefaultOptionsForMode(mode)
 
@@ -213,20 +215,29 @@ class FerrostarWrapper(
         val costingProfile = mode.valhallaCostingProfile(trafficEnabled, routingOptions)
         val profile = costingProfile.routeProviderProfile
         return FerrostarCore(
-            routeAdapter = RouteAdapter.fromWellKnownRouteProvider(WellKnownRouteProvider.Valhalla(
-                endpointUrl = localValhallaEndpoint,
-                profile = profile,
-                optionsJson = routingOptions?.toValhallaOptionsJson(
-                    costingProfileOverride = costingProfile,
-                    departNow = trafficEnabled && mode.supportsTraffic()
+            routeAdapter = RouteAdapter.fromWellKnownRouteProvider(
+                WellKnownRouteProvider.Valhalla(
+                    endpointUrl = localValhallaEndpoint,
+                    profile = profile,
+                    optionsJson = routingOptions?.toValhallaOptionsJson(
+                        costingProfileOverride = costingProfile,
+                        departNow = trafficEnabled && mode.supportsTraffic()
+                    )
                 )
-            )),
+            ),
             httpClient = OkHttpClientProvider(okHttpClient),
             locationProvider = locationProvider,
             navigationControllerConfig = NavigationControllerConfig(
                 waypointAdvance = WaypointAdvanceMode.WaypointWithinRange(WAYPOINT_ADVANCE_RANGE),
-                stepAdvanceCondition = stepAdvanceDistanceEntryAndExit(STEP_ADVANCE_DISTANCE_TO_END.toUShort(), STEP_ADVANCE_DISTANCE_AFTER_END.toUShort(), STEP_ADVANCE_MINIMUM_HORIZONTAL_ACCURACY.toUShort()),
-                arrivalStepAdvanceCondition = stepAdvanceDistanceToEndOfStep(ARRIVAL_STEP_ADVANCE_DISTANCE.toUShort(), ARRIVAL_STEP_ADVANCE_MINIMUM_HORIZONTAL_ACCURACY.toUShort()),
+                stepAdvanceCondition = stepAdvanceDistanceEntryAndExit(
+                    STEP_ADVANCE_DISTANCE_TO_END.toUShort(),
+                    STEP_ADVANCE_DISTANCE_AFTER_END.toUShort(),
+                    STEP_ADVANCE_MINIMUM_HORIZONTAL_ACCURACY.toUShort()
+                ),
+                arrivalStepAdvanceCondition = stepAdvanceDistanceToEndOfStep(
+                    ARRIVAL_STEP_ADVANCE_DISTANCE.toUShort(),
+                    ARRIVAL_STEP_ADVANCE_MINIMUM_HORIZONTAL_ACCURACY.toUShort()
+                ),
                 routeDeviationTracking = RouteDeviationTracking.Custom(
                     detector = getDeviationDetector()
                 ),
@@ -260,7 +271,6 @@ class FerrostarWrapper(
         const val ROUTE_DEVIATION_MINIMUM_ACCURACY = 8u
         const val ROUTE_DEVIATION_MAX_DEVIATION = 25.0
         val COURSE_FILTERING = CourseFiltering.RAW
-
     }
 }
 
@@ -331,7 +341,10 @@ private fun Exception.canRetryWithoutTrafficProfile(): Boolean {
         is ParsingException.InvalidStatusCode -> code.toIntOrNull()
         else -> null
     }
-    return statusCode == HttpURLConnection.HTTP_BAD_REQUEST || statusCode == 422
+    return statusCode == HttpURLConnection.HTTP_BAD_REQUEST ||
+        statusCode == HttpURLConnection.HTTP_PAYMENT_REQUIRED ||
+        statusCode == HttpURLConnection.HTTP_FORBIDDEN ||
+        statusCode == 422
 }
 
 internal fun correctiveActionForConnectivity(
@@ -344,13 +357,26 @@ internal fun correctiveActionForConnectivity(
         CorrectiveAction.DoNothing
     }
 
-fun RoutingMode.supportsTraffic(): Boolean = this == RoutingMode.AUTO
+fun RoutingMode.supportsTraffic(): Boolean = when (this) {
+    RoutingMode.AUTO,
+    RoutingMode.TRUCK,
+    RoutingMode.BUS -> true
+    else -> false
+}
 
 fun RoutingMode.valhallaCostingProfile(
     useTraffic: Boolean,
     routingOptions: RoutingOptions? = null
 ): ValhallaCostingProfile = when {
-    useTraffic && this == RoutingMode.AUTO -> ValhallaCostingProfile.AutoTraffic.Premium
+    useTraffic && this == RoutingMode.AUTO ->
+        ValhallaCostingProfile.AutoTraffic.Premium
+    useTraffic && this == RoutingMode.TRUCK ->
+        ValhallaCostingProfile.TruckTraffic.Premium
+    useTraffic && this == RoutingMode.BUS &&
+        (routingOptions as? BusRoutingOptions)?.lineBus == true ->
+        ValhallaCostingProfile.BusTraffic.Premium
+    useTraffic && this == RoutingMode.BUS ->
+        ValhallaCostingProfile.AutoTraffic.Premium
     this == RoutingMode.BUS && (routingOptions as? BusRoutingOptions)?.lineBus == true ->
         ValhallaCostingProfile.Bus
     this == RoutingMode.BUS -> ValhallaCostingProfile.Auto
