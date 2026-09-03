@@ -96,13 +96,20 @@ class ValhallaRoutingService(
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }
+            val responseBody: String = response.body()
 
             if (!response.status.isSuccess()) {
+                // Keep the upstream error body in bugreports. Stadia/Valhalla often explains
+                // the exact rejected field here; previously we discarded it and retained only 400.
+                Log.e(
+                    TAG,
+                    "Routing upstream failed status=${response.status.value} body=${responseBody.take(2000)}"
+                )
                 throw HttpRequestException(response.status.value.toHttpRequestFailure())
             }
 
             connectivityRepository.reportInternetAvailable()
-            return response.body()
+            return responseBody
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
