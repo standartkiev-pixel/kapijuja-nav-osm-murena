@@ -1,0 +1,68 @@
+name: Diagnose Stadia truck destination snapping
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnose-stadia-truck-snap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Probe truck destination radius
+        shell: bash
+        env:
+          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STADIA_KEY"
+          OUT="diagnostics/stadia-truck-snap-2026-09-03.txt"
+          mkdir -p diagnostics
+          : > "$OUT"
+
+          probe() {
+            name="$1"
+            dest_extra="$2"
+            body="$(mktemp)"
+            json="{\"locations\":[{\"lat\":52.44156712,\"lon\":16.7658691},{\"lat\":52.355681,\"lon\":16.94207${dest_extra}}],\"costing\":\"truck\",\"costing_options\":{\"truck\":{\"gate_cost\":45,\"toll_booth_cost\":30}},\"format\":\"osrm\"}"
+            code="$(curl -sS -o "$body" -w '%{http_code}' -H 'Content-Type: application/json' --data "$json" "https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}")"
+            {
+              echo "=== $name ==="
+              echo "HTTP $code"
+              if [ "$code" = "200" ]; then
+                jq -c '{code,route:(.routes[0]|{weight_name,distance,duration}),waypoints:[.waypoints[]|{distance,name,location}]}' "$body"
+              else
+                cat "$body"
+                echo
+              fi
+              echo
+            } >> "$OUT"
+            rm -f "$body"
+          }
+
+          probe radius_0 ''
+          probe radius_25 ',\"radius\":25'
+          probe radius_50 ',\"radius\":50'
+          probe radius_100 ',\"radius\":100'
+          probe radius_150 ',\"radius\":150'
+          probe radius_200 ',\"radius\":200'
+
+          cat "$OUT"
+
+      - name: Commit diagnostic result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Kapijuja Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add diagnostics/stadia-truck-snap-2026-09-03.txt
+          git commit -m "Record truck destination snap diagnostic" || exit 0
+          git push
