@@ -32,6 +32,7 @@ import earth.maps.cardinal.data.PlanStateRepository
 import earth.maps.cardinal.data.RouteState
 import earth.maps.cardinal.data.RouteStateRepository
 import earth.maps.cardinal.data.RoutingMode
+import earth.maps.cardinal.data.RoutingProfileSelectionStore
 import earth.maps.cardinal.data.TransitPlanState
 import earth.maps.cardinal.data.ViewportRepository
 import earth.maps.cardinal.data.room.RecentSearchRepository
@@ -50,6 +51,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +72,7 @@ class DirectionsViewModel @Inject constructor(
     private val savedPlaceRepository: SavedPlaceRepository,
     private val locationRepository: LocationRepository,
     private val routingProfileRepository: RoutingProfileRepository,
+    private val routingProfileSelectionStore: RoutingProfileSelectionStore,
     private val routeRepository: RouteRepository,
     private val appPreferenceRepository: AppPreferenceRepository,
     private val transitousService: TransitousService,
@@ -78,7 +81,6 @@ class DirectionsViewModel @Inject constructor(
     private val planStateRepository: PlanStateRepository,
 ) : BaseSearchViewModel(geocodingService, viewportRepository, recentSearchRepository) {
 
-    // Directions state
     var fromPlace by mutableStateOf<Place?>(null)
         private set
 
@@ -91,11 +93,9 @@ class DirectionsViewModel @Inject constructor(
     var selectedRoutingProfile by mutableStateOf<RoutingProfile?>(null)
         private set
 
-    // Expose state from repositories
     val routeState: StateFlow<RouteState> = routeStateRepository.routeState
     val planState: StateFlow<TransitPlanState> = planStateRepository.planState
 
-    // Saved places for quick suggestions
     val savedPlaces = placeDao.getAllPlacesAsFlow().map { list ->
         list.map { savedPlaceRepository.toPlace(it) }
     }
@@ -109,19 +109,14 @@ class DirectionsViewModel @Inject constructor(
 
     private var haveManuallySetDeparture: Boolean = false
 
-
     suspend fun initializeRoutingMode() {
-        // Wait for FerrostarWrapperRepository to be initialized before setting options
         ferrostarWrapperRepository.awaitInitialization()
 
-        // Set initial routing mode from preferences
         selectedRoutingMode = appPreferenceRepository.lastRoutingMode.value.let { modeString ->
             RoutingMode.entries.find { it.value == modeString } ?: RoutingMode.AUTO
         }
-        // Initialize with the default profile for the current routing mode
-        initializeDefaultProfileForMode(selectedRoutingMode)
+        initializeProfileForMode(selectedRoutingMode)
     }
-
 
     suspend fun initializeDeparture() {
         if (!appPreferenceRepository.continuousLocationTracking.value) {
@@ -168,9 +163,7 @@ class DirectionsViewModel @Inject constructor(
     private fun fetchDrivingDirections(origin: Place, destination: Place) {
         viewModelScope.launch {
             planStateRepository.clear()
-            // Wait for FerrostarWrapperRepository to be initialized
             ferrostarWrapperRepository.awaitInitialization()
-
             routeStateRepository.setLoading(true)
 
             try {
@@ -263,18 +256,12 @@ class DirectionsViewModel @Inject constructor(
     suspend fun updateRoutingMode(mode: RoutingMode) {
         selectedRoutingMode = mode
         appPreferenceRepository.setLastRoutingMode(mode.value)
-        // Load the default profile for the new mode
-        initializeDefaultProfileForMode(mode)
+        initializeProfileForMode(mode)
         fetchDirectionsIfNeeded()
     }
 
-    /**
-     * Ensures the selected routing mode is valid by checking if it's in the available modes list.
-     * If not, falls back to AUTO mode. This should be called when available modes change.
-     */
     private suspend fun ensureSelectedModeIsValid(availableModes: List<RoutingMode>) {
         if (selectedRoutingMode !in availableModes) {
-            // Fall back to AUTO mode if current mode is no longer available
             updateRoutingMode(RoutingMode.AUTO)
         }
     }
@@ -283,48 +270,21 @@ class DirectionsViewModel @Inject constructor(
         selectedRoutingProfile = profile
 
         viewModelScope.launch {
-            // Apply profile options to the ferrostar wrapper
             if (profile != null) {
-                // Use custom routing profile - update options on existing wrapper
-                val profileWithOptions = routingProfileRepository.getProfileWithOptions(profile.id)
-                profileWithOptions.fold(
-                    onSuccess = { pair ->
-                        pair?.let { (_, options) ->
-                            // Update options on the appropriate wrapper
-                            options?.let {
-                                ferrostarWrapperRepository.setOptionsForMode(
-                                    selectedRoutingMode, it
-                                )
-                            }
-                        }
-                    },
-                    onFailure = {
-                        // Fallback to default if profile loading fails
-                        ferrostarWrapperRepository.resetOptionsToDefaultsForMode(selectedRoutingMode)
-                    }
-                )
+                routingProfileSelectionStore.save(selectedRoutingMode, profile.id)
+                applyProfile(selectedRoutingMode, profile)
             } else {
-                // User explicitly selected "Default" - use built-in defaults
+                routingProfileSelectionStore.save(selectedRoutingMode, null)
                 selectedRoutingProfile = null
                 ferrostarWrapperRepository.resetOptionsToDefaultsForMode(selectedRoutingMode)
             }
-
             fetchDirectionsIfNeeded()
         }
-
     }
 
-    /**
-     * Gets available routing profiles for the current routing mode.
-     */
     fun getAvailableProfilesForCurrentMode() =
         routingProfileRepository.getProfilesForMode(selectedRoutingMode)
 
-    /**
-     * Gets available routing modes for display in the UI.
-     * Always includes AUTO, PUBLIC_TRANSPORT, PEDESTRIAN, and BICYCLE.
-     * Conditionally includes TRUCK, MOTOR_SCOOTER, and MOTORCYCLE only if custom profiles exist for those modes.
-     */
     fun getAvailableRoutingModes() = combine(
         routingProfileRepository.getProfilesForMode(RoutingMode.TRUCK),
         routingProfileRepository.getProfilesForMode(RoutingMode.BUS),
@@ -338,7 +298,6 @@ class DirectionsViewModel @Inject constructor(
             RoutingMode.BICYCLE,
         )
 
-        // Add conditional modes only if they have custom profiles
         if (truckProfiles.isNotEmpty()) {
             modes.add(RoutingMode.TRUCK)
         }
@@ -352,41 +311,53 @@ class DirectionsViewModel @Inject constructor(
             modes.add(RoutingMode.MOTORCYCLE)
         }
 
-        // Ensure the selected mode is still valid
         ensureSelectedModeIsValid(modes)
-
         modes
     }
 
     /**
-     * Initializes the default routing profile for the given mode.
-     * This loads the saved default profile from the database and applies its options.
-     * If no default profile exists, sets selectedRoutingProfile to null and uses built-in defaults.
+     * Uses built-in defaults only when the mode has no custom profiles.
+     * If custom profiles exist, restores the driver's last choice; then falls back
+     * to the database default, and finally the most recently updated profile.
      */
-    private suspend fun initializeDefaultProfileForMode(mode: RoutingMode) {
-        routingProfileRepository.getDefaultProfile(mode).fold(
+    private suspend fun initializeProfileForMode(mode: RoutingMode) {
+        val profiles = routingProfileRepository.getProfilesForMode(mode).first()
+        if (profiles.isEmpty()) {
+            routingProfileSelectionStore.save(mode, null)
+            selectedRoutingProfile = null
+            ferrostarWrapperRepository.resetOptionsToDefaultsForMode(mode)
+            return
+        }
+
+        val lastSelectedId = routingProfileSelectionStore.load(mode)
+        val selectedProfile = profiles.firstOrNull { it.id == lastSelectedId }
+            ?: profiles.firstOrNull { it.isDefault }
+            ?: profiles.first()
+
+        routingProfileSelectionStore.save(mode, selectedProfile.id)
+        applyProfile(mode, selectedProfile)
+    }
+
+    private suspend fun applyProfile(mode: RoutingMode, profile: RoutingProfile) {
+        routingProfileRepository.getProfileWithOptions(profile.id).fold(
             onSuccess = { profileWithOptions ->
-                if (profileWithOptions != null) {
-                    val (profile, options) = profileWithOptions
-                    options?.let {
-                        selectedRoutingProfile = profile
-                        ferrostarWrapperRepository.setOptionsForMode(mode, it)
-                    }
+                val options = profileWithOptions?.second
+                if (options != null) {
+                    selectedRoutingProfile = profile
+                    ferrostarWrapperRepository.setOptionsForMode(mode, options)
                 } else {
-                    // No default profile exists, use built-in defaults
+                    Log.e(TAG, "Routing profile ${profile.id} has no usable options")
                     selectedRoutingProfile = null
                     ferrostarWrapperRepository.resetOptionsToDefaultsForMode(mode)
                 }
             },
             onFailure = { error ->
-                Log.e(TAG, "Failed to load default profile for mode $mode", error)
-                // Fallback to built-in defaults
+                Log.e(TAG, "Failed to load routing profile ${profile.id} for mode $mode", error)
                 selectedRoutingProfile = null
                 ferrostarWrapperRepository.resetOptionsToDefaultsForMode(mode)
             }
         )
     }
-
 
     fun createTurnByTurnRoute(state: RouteState): CardinalRoute.TurnByTurnNavigation? =
         state.routes.getOrNull(state.selectedRouteIndex ?: 0)?.let { route ->
@@ -440,14 +411,9 @@ class DirectionsViewModel @Inject constructor(
     }
 
     override suspend fun getSearchFocusPoint(): LatLng? {
-        // Use fromPlace as focus point for viewport biasing if available,
-        // otherwise fall back to current viewport center
         return fromPlace?.latLng ?: super.getSearchFocusPoint()
     }
 
-    /**
-     * Gets current location as a Place, handling loading state.
-     */
     suspend fun getCurrentLocationAsPlace(): Place? {
         isGettingLocation = true
         return try {
@@ -457,33 +423,19 @@ class DirectionsViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Called when a search result is selected from directions search.
-     * Adds the place to recent searches.
-     */
     fun onPlaceSelectedFromSearch(place: Place) {
         addRecentSearch(place)
     }
 
-    /**
-     * Selects a route by index from the available routes.
-     * This method is called when a route annotation is tapped on the map.
-     * 
-     * @param routeIndex The index of the route to select. Use -1 for the current selected route.
-     */
     fun selectRouteByIndex(routeIndex: Int) {
         val currentRoutes = routeState.value.routes
         if (currentRoutes.isNotEmpty()) {
             val actualIndex = if (routeIndex == -1) {
-                // If -1 is passed, it means the current selected route was tapped
-                // Keep the current selection
                 routeState.value.selectedRouteIndex ?: 0
             } else {
-                // Convert the reversed index back to the correct index
-                // because routes are displayed in reverse order in the RouteLayer
                 currentRoutes.size - 1 - routeIndex
             }
-            
+
             if (actualIndex >= 0 && actualIndex < currentRoutes.size) {
                 routeStateRepository.selectRoute(actualIndex)
             }
