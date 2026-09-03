@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// Guards the operational heavy-vehicle baseline and the Valhalla API boundary.
 class HeavyVehicleDefaultsTest {
     @Test
     fun `truck defaults describe full size articulated vehicle and avoid low class roads`() {
