@@ -81,3 +81,15 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - This is an Android SDK runner-environment mismatch, not a Murena source-code failure.
 - Upstream Murena avoids this mismatch by building inside `cimg/android:2026.07.1-ndk`.
 - Next experiment: run our baseline job inside the same `cimg/android:2026.07.1-ndk` container and follow the upstream GitLab build steps directly instead of reconstructing the SDK environment manually.
+
+## 2026-09-03 — baseline build experiment 2: our diagnostic used the wrong API-37 directory name
+
+- GitHub Actions run: `33773986540`; job: `100710980348`.
+- The exact upstream container `cimg/android:2026.07.1-ndk` downloaded and started successfully.
+- Checkout succeeded and Git LFS assets were pulled successfully.
+- Container Android SDK reported `sdkmanager 20.0` and had platforms through API 37.
+- Important detail: this image stores the API-37 platform directory as `platforms/android-37.0`, not `platforms/android-37`.
+- Our extra diagnostic command `test -d "$ANDROID_HOME/platforms/android-37"` therefore failed even though API 37 is present. The workflow stopped before secret generation, Rust/UniFFI generation and application compilation.
+- This failure was introduced by our CI diagnostic, not by Murena source code.
+- The container also reports `NDK_STABLE_VERSION=29.0.14206865`, matching upstream Murena's requested NDK.
+- Fix: remove our hard-coded platform-directory assertion and follow Murena's own `.gitlab-ci.yml` build sequence without inventing additional SDK-name assumptions.
