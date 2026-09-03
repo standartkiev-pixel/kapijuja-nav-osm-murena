@@ -1,0 +1,127 @@
+name: Build stock Murena Maps ARM64 debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cardinal-android/**'
+      - 'cardinal-geocoder/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/build-stock-murena-apk.yml'
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_NDK_VERSION: '29.0.14206865'
+  ANDROID_CMAKE_VERSION: '3.22.1'
+
+jobs:
+  build-stock-arm64-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout clean Murena snapshot including Git LFS assets
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: cardinal-android/**/*.gradle*
+
+      - name: Set up Android command line tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37, NDK and CMake used by upstream
+        shell: bash
+        run: |
+          set -euxo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager \
+            'platforms;android-37' \
+            'build-tools;37.0.0' \
+            "ndk;${ANDROID_NDK_VERSION}" \
+            "cmake;${ANDROID_CMAKE_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install Rust build prerequisites
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install cargo-ndk --locked
+
+      - name: Verify imported upstream provenance
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Imported Murena upstream commit: $(cat UPSTREAM_MURENA_COMMIT)"
+          echo "Imported Murena upstream repository: $(cat UPSTREAM_MURENA_REPOSITORY)"
+          git lfs ls-files
+
+      - name: Generate stock upstream hidden Stadia secret source
+        working-directory: cardinal-android
+        shell: bash
+        env:
+          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
+        run: |
+          set -euxo pipefail
+          test -n "$STADIA_KEY"
+          ./gradlew :app:hideSecret \
+            -Pkey="$STADIA_KEY" \
+            -Ppackage=earth.maps.cardinal \
+            -PkeyName=StadiaKey \
+            --no-daemon
+
+      - name: Generate upstream Rust UniFFI bindings
+        working-directory: cardinal-android
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew generateUniFFIBindings --stacktrace --no-daemon
+
+      - name: Build unmodified stock ARM64 debug APK
+        working-directory: cardinal-android
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew assembleArm64Debug --info --stacktrace --no-daemon 2>&1 | tee ../build-arm64-debug.log
+
+      - name: Show generated APK metadata
+        if: success()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find cardinal-android/app/build/outputs/apk/arm64/debug -maxdepth 1 -type f -name '*.apk' -print -exec ls -lh {} \; -exec sha256sum {} \;
+
+      - name: Upload stock Murena ARM64 debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kapijuja-Murena-stock-arm64-debug
+          path: cardinal-android/app/build/outputs/apk/arm64/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload baseline build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kapijuja-Murena-stock-build-log
+          path: build-arm64-debug.log
+          if-no-files-found: warn
+          retention-days: 14
