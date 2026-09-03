@@ -1,0 +1,74 @@
+name: Diagnose Stadia live traffic profiles
+
+on:
+  push:
+    branches: [ critical-pass-2026-09-03 ]
+    paths:
+      - '.github/workflows/diagnose-stadia-live-traffic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose-live-traffic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe traffic profiles with configured Stadia secret
+        shell: bash
+        env:
+          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$STADIA_KEY"
+
+          probe() {
+            local name="$1"
+            local costing="$2"
+            local options_key="$3"
+            local options="$4"
+            local body
+            body="$(mktemp)"
+            local request
+            request="$(jq -cn \
+              --arg costing "$costing" \
+              --arg optionsKey "$options_key" \
+              --argjson options "$options" \
+              '{
+                locations:[
+                  {lat:52.44156712,lon:16.7658691},
+                  {lat:52.355681,lon:16.94207}
+                ],
+                costing:$costing,
+                costing_options:{($optionsKey):$options},
+                date_time:{type:0},
+                format:"osrm"
+              }')"
+
+            local code
+            code="$(curl -sS -o "$body" -w '%{http_code}' \
+              -H 'Content-Type: application/json' \
+              --data "$request" \
+              "https://api.stadiamaps.com/route/v1?api_key=${STADIA_KEY}")"
+
+            echo "=== ${name} ==="
+            echo "HTTP ${code}"
+            if [ "$code" = "200" ]; then
+              jq -c '{
+                ok:true,
+                route_count:(.routes|length // 0),
+                first_route:(if .routes then (.routes[0] | {distance,duration,weight_name}) else null end),
+                trip:(if .trip then {status:.trip.status,status_message:.trip.status_message,summary:.trip.summary} else null end)
+              }' "$body"
+            else
+              jq -c '{error_code:(.error_code // .code // null),error:(.error // .error_message // .message // null)}' "$body" 2>/dev/null || echo 'Non-JSON error body'
+            fi
+            rm -f "$body"
+          }
+
+          AUTO='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
+          TRUCK='{"height":4.0,"width":2.5,"length":16.5,"weight":45.0,"axle_count":3,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"low_class_penalty":300.0,"use_truck_route":1.0,"ignore_closures":false,"closure_factor":10.0}'
+          BUS='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
+
+          probe tourist_coach_auto_traffic_premium auto_traffic_premium auto "$AUTO"
+          probe truck_traffic_premium truck_traffic_premium truck "$TRUCK"
+          probe line_bus_traffic_premium bus_traffic_premium bus "$BUS"
