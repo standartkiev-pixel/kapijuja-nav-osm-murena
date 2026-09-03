@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: kapijuja-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ANDROID_NDK_VERSION: '29.0.14206865'
   ANDROID_CMAKE_VERSION: '3.22.1'
@@ -120,7 +124,7 @@ jobs:
           set -euxo pipefail
           find cardinal-android/app/build/outputs/apk/arm64/debug -maxdepth 1 -type f -name '*.apk' -print -exec ls -lh {} \; -exec sha256sum {} \;
 
-      - name: Upload Kapijuja online vehicle test APK
+      - name: Upload final Kapijuja APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
