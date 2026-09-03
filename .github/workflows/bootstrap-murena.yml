@@ -43,19 +43,19 @@ jobs:
           COMMIT="$(cat /tmp/upstream_commit)"
           DATE="$(sed -n '1p' /tmp/upstream_head.txt)"
           SUBJECT="$(sed -n '2p' /tmp/upstream_head.txt)"
-          cat >> KAPIJUJA_PROJECT_LOG.md <<EOF
-
-## 2026-09-03 — upstream snapshot imported automatically
-
-- Official upstream: \`https://gitlab.e.foundation/e/os/maps\`
-- Upstream branch: \`main\`
-- Exact upstream commit: \`$COMMIT\`
-- Upstream commit date: \`$DATE\`
-- Upstream commit subject: \`$SUBJECT\`
-- Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream \`.git\` directory is intentionally not copied.
-- Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.
-- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.
-EOF
+          {
+            echo
+            echo '## 2026-09-03 — upstream snapshot imported automatically'
+            echo
+            echo '- Official upstream: `https://gitlab.e.foundation/e/os/maps`'
+            echo '- Upstream branch: `main`'
+            echo "- Exact upstream commit: \`$COMMIT\`"
+            echo "- Upstream commit date: \`$DATE\`"
+            echo "- Upstream commit subject: \`$SUBJECT\`"
+            echo '- Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream `.git` directory is intentionally not copied.'
+            echo '- Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.'
+            echo '- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.'
+          } >> KAPIJUJA_PROJECT_LOG.md
 
       - name: Commit clean source snapshot
         run: |
