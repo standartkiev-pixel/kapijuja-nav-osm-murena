@@ -1,0 +1,48 @@
+name: Apply heavy vehicle defaults and Europe country downloads
+
+on:
+  push:
+    branches: [ critical-pass-2026-09-03 ]
+    paths:
+      - '.github/workflows/apply-heavy-vehicle-country-downloads.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply high-level heavy vehicle and country download patch
+        shell: bash
+        run: python3 .github/scripts/apply_heavy_vehicle_country_downloads.py
+
+      - name: Verify source shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -n 'val length: Double? = 16.5' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'val weight: Double? = 45.0' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'val length: Double? = 13.5' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'val weight: Double? = 18.0' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'lowClassPenalty: Double? = 300.0' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'Europe - download entire country' cardinal-android/app/src/main/java/earth/maps/cardinal/ui/home/OfflineAreasScreen.kt
+          test -f cardinal-android/app/src/main/java/earth/maps/cardinal/data/EuropeanCountryDownloads.kt
+          test -f cardinal-android/app/src/test/java/earth/maps/cardinal/routing/HeavyVehicleDefaultsTest.kt
+          git diff --check
+          git diff --stat
+
+      - name: Commit canonical branch source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Kapijuja Build Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add cardinal-android
+          git commit -m 'Tune heavy vehicle routing and add Europe country downloads'
+          git push origin HEAD:critical-pass-2026-09-03
