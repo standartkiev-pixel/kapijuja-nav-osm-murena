@@ -1,0 +1,67 @@
+name: Bootstrap clean Murena Maps source
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/bootstrap-murena.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preserve Kapijuja bootstrap files
+        run: |
+          cp KAPIJUJA_PROJECT_LOG.md /tmp/KAPIJUJA_PROJECT_LOG.md
+          cp .github/workflows/bootstrap-murena.yml /tmp/bootstrap-murena.yml
+
+      - name: Clone current official Murena Maps upstream
+        run: |
+          git clone --depth 1 --branch main https://gitlab.e.foundation/e/os/maps.git /tmp/murena-upstream
+          git -C /tmp/murena-upstream rev-parse HEAD | tee /tmp/upstream_commit
+          git -C /tmp/murena-upstream log -1 --format='%cI%n%s' | tee /tmp/upstream_head.txt
+
+      - name: Replace target tree with clean upstream snapshot
+        run: |
+          rsync -a --delete --exclude='.git' /tmp/murena-upstream/ ./
+          mkdir -p .github/workflows
+          cp /tmp/bootstrap-murena.yml .github/workflows/bootstrap-murena.yml
+          cp /tmp/KAPIJUJA_PROJECT_LOG.md KAPIJUJA_PROJECT_LOG.md
+          cp /tmp/upstream_commit UPSTREAM_MURENA_COMMIT
+          printf '%s\n' 'https://gitlab.e.foundation/e/os/maps' > UPSTREAM_MURENA_REPOSITORY
+
+      - name: Append exact import information to project log
+        run: |
+          COMMIT="$(cat /tmp/upstream_commit)"
+          DATE="$(sed -n '1p' /tmp/upstream_head.txt)"
+          SUBJECT="$(sed -n '2p' /tmp/upstream_head.txt)"
+          cat >> KAPIJUJA_PROJECT_LOG.md <<EOF
+
+## 2026-09-03 — upstream snapshot imported automatically
+
+- Official upstream: \`https://gitlab.e.foundation/e/os/maps\`
+- Upstream branch: \`main\`
+- Exact upstream commit: \`$COMMIT\`
+- Upstream commit date: \`$DATE\`
+- Upstream commit subject: \`$SUBJECT\`
+- Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream \`.git\` directory is intentionally not copied.
+- Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.
+- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.
+EOF
+
+      - name: Commit clean source snapshot
+        run: |
+          git config user.name 'kapijuja-build-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git status --short
+          git commit -m "Import clean Murena Maps upstream snapshot"
+          git push origin HEAD:main
