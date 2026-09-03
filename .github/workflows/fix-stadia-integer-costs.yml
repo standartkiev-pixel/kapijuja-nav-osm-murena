@@ -1,0 +1,86 @@
+name: Fix Stadia integer costing fields
+
+on:
+  push:
+    branches: [ critical-pass-2026-09-03 ]
+    paths:
+      - '.github/workflows/fix-stadia-integer-costs.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Normalize integer-valued Valhalla cost and penalty fields
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt')
+          s = p.read_text()
+          old = '''            // Stadia's current hosted Valhalla request schema requires these time costs
+                      // as JSON integers. The profile editor stores them as Double for sliders,
+                      // so normalize them only at the API boundary. Sending 45.0/30.0 causes
+                      // HTTP 400 ("expected i32") before routing is attempted.
+                      normalizeIntegerCost("gate_cost")
+                      normalizeIntegerCost("toll_booth_cost")'''
+          # tolerate the actual source indentation exactly as Kotlin emits it
+          old = old.replace('                      //', '            //').replace('                      normalize', '            normalize')
+          new = '''            // Stadia's hosted route schema represents second-based costs/penalties as i32.
+                      // Profile sliders remain Double in the app, but 300.0 is rejected before
+                      // routing (HTTP 400: expected i32). Normalize only at the HTTP API boundary.
+                      listOf(
+                          "maneuver_penalty",
+                          "gate_cost",
+                          "gate_penalty",
+                          "toll_booth_cost",
+                          "toll_booth_penalty",
+                          "private_access_penalty",
+                          "destination_only_penalty",
+                          "service_penalty",
+                          "alley_penalty",
+                          "low_class_penalty",
+                          "country_crossing_cost",
+                          "country_crossing_penalty",
+                          "ferry_cost",
+                          "rail_ferry_cost"
+                      ).forEach(::normalizeIntegerCost)'''
+          new = new.replace('                      //', '            //').replace('                      listOf', '            listOf').replace('                          "', '                "').replace('                      ).', '            ).')
+          if old not in s:
+              raise SystemExit('RoutingOptions integer normalization block not found')
+          p.write_text(s.replace(old, new, 1))
+
+          t = Path('cardinal-android/app/src/test/java/earth/maps/cardinal/routing/HeavyVehicleDefaultsTest.kt')
+          ts = t.read_text()
+          ts = ts.replace(
+              'assertTrue(json.contains("\\\"service_penalty\\\":300.0"))',
+              'assertTrue(json.contains("\\\"service_penalty\\\":300"))\n        assertFalse(json.contains("\\\"service_penalty\\\":300.0"))\n        assertTrue(json.contains("\\\"maneuver_penalty\\\":45"))'
+          )
+          ts = ts.replace(
+              'assertTrue(json.contains("\\\"low_class_penalty\\\":300.0"))',
+              'assertTrue(json.contains("\\\"low_class_penalty\\\":300"))\n        assertFalse(json.contains("\\\"low_class_penalty\\\":300.0"))'
+          )
+          t.write_text(ts)
+          PY
+
+          grep -n 'service_penalty' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          grep -n 'low_class_penalty' cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+          git diff --check
+
+      - name: Commit API boundary fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Kapijuja Build Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt \
+                  cardinal-android/app/src/test/java/earth/maps/cardinal/routing/HeavyVehicleDefaultsTest.kt
+          git commit -m 'Normalize Stadia integer costing fields'
+          git push origin HEAD:critical-pass-2026-09-03
