@@ -139,6 +139,10 @@ class SettingsViewModel @Inject constructor(
         appPreferenceRepository.setValhallaApiKey(apiKey)
     }
 
+    fun resetApiConfigurationsToDefaults() {
+        appPreferenceRepository.resetApiConfigurationsToDefaults()
+    }
+
     fun setContinuousLocationTrackingEnabled(enabled: Boolean) {
         appPreferenceRepository.setContinuousLocationTracking(enabled)
     }
