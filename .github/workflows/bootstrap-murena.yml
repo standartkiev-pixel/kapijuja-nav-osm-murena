@@ -18,9 +18,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Preserve Kapijuja bootstrap files
+      - name: Preserve Kapijuja bootstrap workflow
         run: |
-          cp KAPIJUJA_PROJECT_LOG.md /tmp/KAPIJUJA_PROJECT_LOG.md
           cp .github/workflows/bootstrap-murena.yml /tmp/bootstrap-murena.yml
 
       - name: Clone current official Murena Maps upstream
@@ -34,9 +33,14 @@ jobs:
           rsync -a --delete --exclude='.git' /tmp/murena-upstream/ ./
           mkdir -p .github/workflows
           cp /tmp/bootstrap-murena.yml .github/workflows/bootstrap-murena.yml
-          cp /tmp/KAPIJUJA_PROJECT_LOG.md KAPIJUJA_PROJECT_LOG.md
           cp /tmp/upstream_commit UPSTREAM_MURENA_COMMIT
           printf '%s\n' 'https://gitlab.e.foundation/e/os/maps' > UPSTREAM_MURENA_REPOSITORY
+
+      - name: Rebase working tree on latest target main without losing imported files
+        run: |
+          git fetch origin main
+          git reset --mixed origin/main
+          git show origin/main:KAPIJUJA_PROJECT_LOG.md > KAPIJUJA_PROJECT_LOG.md
 
       - name: Append exact import information to project log
         run: |
@@ -45,7 +49,7 @@ jobs:
           SUBJECT="$(sed -n '2p' /tmp/upstream_head.txt)"
           {
             echo
-            echo '## 2026-09-03 — upstream snapshot imported automatically'
+            echo '## 2026-09-03 — clean upstream snapshot imported'
             echo
             echo '- Official upstream: `https://gitlab.e.foundation/e/os/maps`'
             echo '- Upstream branch: `main`'
@@ -55,9 +59,10 @@ jobs:
             echo '- Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream `.git` directory is intentionally not copied.'
             echo '- Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.'
             echo '- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.'
+            echo '- Next gate: inspect the upstream build instructions and compile a stock debug APK before any product feature changes.'
           } >> KAPIJUJA_PROJECT_LOG.md
 
-      - name: Commit clean source snapshot
+      - name: Commit and push clean source snapshot
         run: |
           git config user.name 'kapijuja-build-bot'
           git config user.email 'actions@users.noreply.github.com'
