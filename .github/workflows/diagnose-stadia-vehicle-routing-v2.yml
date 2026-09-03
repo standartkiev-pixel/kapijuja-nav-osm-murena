@@ -37,16 +37,7 @@ jobs:
               echo "=== $name ==="
               echo "HTTP $code"
               if [ "$code" = "200" ]; then
-                python3 - "$body" <<'PY'
-import json,sys
-p=json.load(open(sys.argv[1]))
-if 'routes' in p:
-    r=p['routes'][0]
-    print(json.dumps({'code':p.get('code'),'weight_name':r.get('weight_name'),'distance':r.get('distance'),'duration':r.get('duration')}, ensure_ascii=False))
-else:
-    t=p.get('trip',{})
-    print(json.dumps({'status':t.get('status'),'status_message':t.get('status_message'),'summary':t.get('summary')}, ensure_ascii=False))
-PY
+                jq -c '{code,route:(if .routes then (.routes[0] | {weight_name,distance,duration}) else null end),trip:(if .trip then (.trip | {status,status_message,summary}) else null end)}' "$body"
               else
                 cat "$body"
                 echo
