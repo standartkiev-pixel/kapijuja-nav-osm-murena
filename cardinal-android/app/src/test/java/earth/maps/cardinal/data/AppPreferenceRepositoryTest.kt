@@ -84,4 +84,72 @@ class AppPreferenceRepositoryTest {
         assertEquals(baseUrl, repository.nearbyApiConfig.value.baseUrl)
         assertEquals(baseUrl, AppPreferences(context).loadNearbyBaseUrl())
     }
+    @Test
+    fun `fresh API settings use no-key defaults`() {
+        val repository = AppPreferenceRepository(context)
+
+        assertEquals(
+            AppPreferences.DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY,
+            repository.peliasApiConfig.value.baseUrl
+        )
+        assertNull(repository.peliasApiConfig.value.apiKey)
+        assertEquals(
+            AppPreferences.DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY,
+            repository.valhallaApiConfig.value.baseUrl
+        )
+        assertNull(repository.valhallaApiConfig.value.apiKey)
+    }
+
+    @Test
+    fun `entering Stadia keys selects Stadia endpoints and clearing restores fallback`() = runTest {
+        val repository = AppPreferenceRepository(context)
+
+        repository.setPeliasApiKey("pelias-key")
+        repository.setValhallaApiKey("valhalla-key")
+        advanceUntilIdle()
+
+        assertEquals(AppPreferences.STADIA_PELIAS_ENDPOINT, repository.peliasApiConfig.value.baseUrl)
+        assertEquals("pelias-key", repository.peliasApiConfig.value.apiKey)
+        assertEquals(AppPreferences.STADIA_VALHALLA_ENDPOINT, repository.valhallaApiConfig.value.baseUrl)
+        assertEquals("valhalla-key", repository.valhallaApiConfig.value.apiKey)
+
+        repository.setPeliasApiKey(null)
+        repository.setValhallaApiKey(null)
+        advanceUntilIdle()
+
+        assertEquals(
+            AppPreferences.DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY,
+            repository.peliasApiConfig.value.baseUrl
+        )
+        assertEquals(
+            AppPreferences.DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY,
+            repository.valhallaApiConfig.value.baseUrl
+        )
+        assertNull(repository.peliasApiConfig.value.apiKey)
+        assertNull(repository.valhallaApiConfig.value.apiKey)
+    }
+
+    @Test
+    fun `reset API settings removes custom endpoints and keys`() = runTest {
+        val repository = AppPreferenceRepository(context)
+        repository.setPeliasBaseUrl("https://pelias.example")
+        repository.setPeliasApiKey("pelias-key")
+        repository.setValhallaBaseUrl("https://valhalla.example")
+        repository.setValhallaApiKey("valhalla-key")
+        advanceUntilIdle()
+
+        repository.resetApiConfigurationsToDefaults()
+
+        assertEquals(
+            AppPreferences.DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY,
+            repository.peliasApiConfig.value.baseUrl
+        )
+        assertNull(repository.peliasApiConfig.value.apiKey)
+        assertEquals(
+            AppPreferences.DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY,
+            repository.valhallaApiConfig.value.baseUrl
+        )
+        assertNull(repository.valhallaApiConfig.value.apiKey)
+    }
+
 }
