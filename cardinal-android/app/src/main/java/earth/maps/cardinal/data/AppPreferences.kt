@@ -21,10 +21,8 @@ package earth.maps.cardinal.data
 import android.content.Context
 import android.content.SharedPreferences
 import android.text.format.DateFormat
-import android.util.Log
 import androidx.core.content.edit
 import earth.maps.cardinal.R
-import earth.maps.cardinal.Secrets
 import java.util.Locale
 
 /**
@@ -34,50 +32,17 @@ class AppPreferences(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    private val defaultStadiaApiKey: String? by lazy {
-        loadDefaultStadiaApiKey()
-    }
-
-    private fun loadDefaultStadiaApiKey(): String? {
-        val result = runCatching {
-            val secretsPackageName = Secrets::class.java.`package`?.name
-            check(!secretsPackageName.isNullOrBlank()) {
-                "Secrets package name was unavailable"
-            }
-            Secrets().getStadiaKey(secretsPackageName)
-        }
-
-        val key = result.getOrElse { error ->
-            Log.e(TAG, "Failed to read embedded Stadia API key; using no-key fallback endpoints", error)
-            return null
-        }
-
-        if (key.isBlank()) {
-            Log.w(TAG, "Embedded Stadia API key was blank; using no-key fallback endpoints")
-            return null
-        }
-
-        Log.i(TAG, "Embedded Stadia API key loaded; using Stadia default endpoints")
-        return key
-    }
-
+    // Kapijuja does not embed a private Stadia key in the APK. A fresh install uses
+    // Murena/Cardinal's public no-key fallback services. Drivers who have a Stadia key
+    // can enter it in Advanced settings; AppPreferenceRepository then selects the
+    // matching Stadia endpoint. This keeps credentials out of the binary.
     private val defaultPeliasBaseUrl: String
-        get() = if (defaultStadiaApiKey != null) {
-            context.getString(R.string.default_pelias_endpoint)
-        } else {
-            DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY
-        }
+        get() = DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY
 
     private val defaultValhallaBaseUrl: String
-        get() = if (defaultStadiaApiKey != null) {
-            context.getString(R.string.default_valhalla_endpoint)
-        } else {
-            DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY
-        }
+        get() = DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY
 
     companion object {
-        private const val TAG = "AppPreferences"
-
         private const val KEY_CONTRAST_LEVEL = "contrast_level"
         private const val KEY_ANIMATION_SPEED = "animation_speed"
         private const val KEY_OFFLINE_MODE = "offline_mode"
@@ -104,8 +69,11 @@ class AppPreferences(private val context: Context) {
         private const val KEY_VALHALLA_BASE_URL = "valhalla_base_url"
         private const val KEY_VALHALLA_API_KEY = "valhalla_api_key"
         private const val KEY_NEARBY_BASE_URL = "nearby_base_url"
-        private const val DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY = "https://maps.earth/pelias/v1"
-        private const val DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY =
+        internal const val STADIA_PELIAS_ENDPOINT = "https://api.stadiamaps.com/geocoding/v1"
+        internal const val STADIA_VALHALLA_ENDPOINT = "https://api.stadiamaps.com/route/v1"
+        internal const val DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY =
+            "https://maps.earth/pelias/v1"
+        internal const val DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY =
             "https://maps.earth/valhalla/route"
 
         // Default values
@@ -489,14 +457,8 @@ class AppPreferences(private val context: Context) {
      * Loads the saved Pelias API key.
      * Returns null if no API key is saved.
      */
-    fun loadPeliasApiKey(): String? {
-        val key = prefs.getString(KEY_PELIAS_API_KEY, null)
-        return if (key.isNullOrBlank() && loadPeliasBaseUrl() == defaultPeliasBaseUrl) {
-            defaultStadiaApiKey
-        } else {
-            key
-        }
-    }
+    fun loadPeliasApiKey(): String? =
+        prefs.getString(KEY_PELIAS_API_KEY, null)?.takeIf { it.isNotBlank() }
 
     // Valhalla API configuration methods
 
@@ -539,12 +501,19 @@ class AppPreferences(private val context: Context) {
      * Loads the saved Valhalla API key.
      * Returns null if no API key is saved.
      */
-    fun loadValhallaApiKey(): String? {
-        val key = prefs.getString(KEY_VALHALLA_API_KEY, null)
-        return if (key.isNullOrBlank() && loadValhallaBaseUrl() == defaultValhallaBaseUrl) {
-            defaultStadiaApiKey
-        } else {
-            key
+    fun loadValhallaApiKey(): String? =
+        prefs.getString(KEY_VALHALLA_API_KEY, null)?.takeIf { it.isNotBlank() }
+
+    /**
+     * Restore the API editor to the same no-key defaults used by a fresh Kapijuja install.
+     * This intentionally does not manufacture or persist any private API credential.
+     */
+    fun resetApiConfigurationsToDefaults() {
+        prefs.edit {
+            remove(KEY_PELIAS_BASE_URL)
+            remove(KEY_PELIAS_API_KEY)
+            remove(KEY_VALHALLA_BASE_URL)
+            remove(KEY_VALHALLA_API_KEY)
         }
     }
 }
