@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -52,16 +55,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maplibre.compose.camera.CameraState
+import com.maplibre.compose.camera.rememberSaveableMapViewCamera
 import com.stadiamaps.ferrostar.composeui.config.VisualNavigationViewConfig
 import com.stadiamaps.ferrostar.core.DefaultNavigationViewModel
 import com.stadiamaps.ferrostar.core.annotation.valhalla.valhallaExtendedOSRMAnnotationPublisher
+import com.stadiamaps.ferrostar.maplibreui.runtime.navigationMapViewCamera
 import com.stadiamaps.ferrostar.maplibreui.views.DynamicallyOrientingNavigationView
 import earth.maps.cardinal.R
 import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.data.formatDuration
+import kotlinx.coroutines.delay
 import uniffi.ferrostar.Route
 
 const val NAVIGATION_OFFLINE_WARNING_TEST_TAG = "navigation_offline_warning"
+private const val NAVIGATION_AUTO_RECENTER_DELAY_MILLIS = 15_000L
 
 @Composable
 fun KeepScreenOn() {
@@ -150,11 +158,42 @@ fun TurnByTurnNavigationScreen(
         if (route != null) {
             val activeTrafficRoute = rememberUpdatedState(navigationState.activeRoute ?: route)
             val trafficAvailable = rememberUpdatedState(navigationState.trafficAvailable)
+            val navigationCamera = navigationMapViewCamera()
+            val latestNavigationCamera by rememberUpdatedState(navigationCamera)
+            val camera = rememberSaveableMapViewCamera()
+            var pointerInteractionActive by remember { mutableStateOf(false) }
+            val isOffGuidance =
+                camera.value.state !is CameraState.TrackingUserLocationWithBearing
 
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Route-only TomTom-style return to Guidance: browsing is never interrupted
+            // without a route. While the driver is touching the screen the countdown is
+            // suspended; every new interaction therefore restarts the full 15-second delay.
+            LaunchedEffect(route, isOffGuidance, pointerInteractionActive) {
+                if (isOffGuidance && !pointerInteractionActive) {
+                    delay(NAVIGATION_AUTO_RECENTER_DELAY_MILLIS)
+                    if (camera.value.state !is CameraState.TrackingUserLocationWithBearing) {
+                        camera.value = latestNavigationCamera
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(route) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                pointerInteractionActive = event.changes.any { it.pressed }
+                            }
+                        }
+                    }
+            ) {
                 DynamicallyOrientingNavigationView(
                     styleUrl = styleUrl,
                     modifier = Modifier.fillMaxSize(),
+                    camera = camera,
+                    navigationCamera = navigationCamera,
                     viewModel = viewModel,
                     config = VisualNavigationViewConfig.Default(),
                     views = navigationViewComponentBuilder(
