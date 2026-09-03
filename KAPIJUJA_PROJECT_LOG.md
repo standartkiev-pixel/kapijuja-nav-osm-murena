@@ -152,3 +152,135 @@ Do not begin BUS/TRUCK modifications until the following baseline test is comple
 - For BUS, use true Valhalla `bus` costing rather than renaming `auto`/truck.
 - Add weight/height/width/length only after verifying the exact Valhalla/Stadia fields supported by the backend.
 - Preserve the clean baseline commit and APK as a permanent regression reference.
+
+## 2026-09-03 — DEVICE BASELINE PASSED; stock navigation is a stable reference
+
+The clean Murena/Cardinal ARM64 debug build has now been installed and exercised on the real Samsung test device.
+
+### Confirmed working on device
+
+- App installs and launches normally.
+- No crashes or visible stability problems were observed during the test session.
+- Map rendering works.
+- Ordinary car routing works well on the user's real test route.
+- Turn-by-turn navigation starts and runs.
+- Maneuver banner/arrow UI works.
+- Spoken TTS/voice guidance works.
+- Current position and route display work.
+- The stock Routing Profiles UI works and allows creation/editing of profiles.
+- A Truck profile can be created from the existing UI.
+- Existing truck editor exposes useful vehicle/profile controls, including vehicle length, width, height, weight and other Valhalla truck options.
+
+This state is now the permanent regression baseline. Do not replace large parts of the app or alter low-level MapLibre/Ferrostar/native code merely to add BUS/TRUCK behavior. Make the smallest possible high-level routing/profile changes and compare every later build against this stable state.
+
+### User-observed functional gap
+
+At the known Poznań restriction/control location, selecting the newly-created Truck profile did not produce the expected truck-specific path. The route behaved essentially like ordinary car routing. The user also observed that a failed route attempt could show the message `We received route data we couldn’t read. Please try again.`
+
+### Exact source-level Truck selection bug found
+
+`cardinal-android/app/src/main/java/earth/maps/cardinal/ui/directions/DirectionsViewModel.kt`
+
+The current `getFerrostarWrapper()` selector explicitly handles only:
+
+- `RoutingMode.AUTO` -> `ferrostarWrapperRepository.driving`
+- `RoutingMode.PEDESTRIAN` -> walking
+- `RoutingMode.BICYCLE` -> cycling
+
+and then uses:
+
+- `else -> ferrostarWrapperRepository.driving`
+
+Therefore `RoutingMode.TRUCK` falls through to the **driving/car wrapper** instead of `ferrostarWrapperRepository.truck`. This is a high-level bug and is the first thing to fix in the next functional build. The truck wrapper already exists elsewhere in the repository, so do not redesign the navigation engine.
+
+### Truck profile/options plumbing is already present
+
+Relevant existing files:
+
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/RoutingMode.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/room/RoutingProfile.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/room/RoutingProfileRepository.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/routing/FerrostarWrapper.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/routing/FerrostarWrapperRepository.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/routing/ValhallaCostingProfile.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/ui/settings/ProfileEditorScreen.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/ui/settings/ProfileEditorViewModel.kt`
+
+`TruckRoutingOptions` already contains truck-specific fields such as length, width, height, weight (metric tons), axle count, hazmat and truck-route preference. The profile repository serializes/deserializes Truck options rather than merely relabeling a car profile.
+
+### Traffic-profile caveat discovered from bugreport/source inspection
+
+The routing layer also contains special traffic profile names:
+
+- car traffic family: `auto_traffic...`
+- truck traffic family: `truck_traffic...`
+
+`FerrostarWrapper` enables traffic automatically for both AUTO and TRUCK, and `ValhallaCostingProfile` can therefore request `truck_traffic` instead of plain `truck`.
+
+A device bugreport from the Truck test showed a Truck-related request carrying real vehicle values (approximately 12.93 m length, 2.50 m width, 3.83 m height and 15.23 metric tons) and an HTTP 400 response on a `truck_traffic` path. This demonstrates that at least one routing path preserves truck dimensions, but the traffic-profile compatibility/fallback must be retested after the primary Directions wrapper-selection bug is fixed.
+
+Do not combine these two observations into one guessed fix. First make Directions use the actual truck wrapper. Then capture a fresh request/log and determine whether Stadia accepts `truck_traffic`; if not, use/fallback to ordinary Valhalla `truck` while preserving truck `costing_options`.
+
+## 2026-09-03 — offline download architecture findings; no country UI patch yet
+
+No application code has been changed for country downloads yet. Source inspection found that the existing offline system is already much more than a simple visual-map cache.
+
+### Existing stock behavior
+
+`OfflineAreasScreen.kt` currently creates a download from the **current visible map viewport**. The UI refuses to start a new area download while zoomed out below level 8.
+
+`OfflineAreasViewModel.kt` sends an arbitrary `BoundingBox` to `TileDownloadForegroundService` with configured offline zoom levels 5 through 14.
+
+The offline area status model explicitly has separate stages:
+
+1. `DOWNLOADING_BASEMAP`
+2. `DOWNLOADING_VALHALLA`
+3. `PROCESSING_GEOCODER`
+4. `COMPLETED`
+
+Therefore a completed offline area is intended to contain data for:
+
+- map rendering,
+- local Valhalla routing,
+- offline geocoding/search processing,
+
+not only visible map tiles.
+
+### Country-level implementation direction
+
+The repository already contains:
+
+- `cardinal-android/app/src/main/data/country_bounds.json`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/CountryCoordinateResolver.kt`
+
+This makes the requested UI concept **Europe -> Country -> Download** feasible without redesigning the downloader: the country selector can resolve a country to a bounding box and feed that box into the existing download service.
+
+However, before building this UI, inspect the actual country bounds dataset, tile-count/storage implications (especially Germany/France/Italy/Spain/Poland), provider/server limits, and whether downloading a simple rectangular country bounding box is acceptable or whether exact country-shaped tile selection is needed. The user's desired UX is country-level, not administrative regions/voivodeships/Länder.
+
+### Files to inspect next for offline work
+
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/ui/home/OfflineAreasScreen.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/ui/home/OfflineAreasViewModel.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/room/OfflineArea.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/tileserver/TileDownloadForegroundService.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/tileserver/TileDownloadManager.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/tileserver/ValhallaTileUtils.kt`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/routing/OfflineRoutingService.kt`
+- `cardinal-android/app/src/main/data/country_bounds.json`
+- `cardinal-android/app/src/main/java/earth/maps/cardinal/data/CountryCoordinateResolver.kt`
+
+The user reported that the offline area he tried did not successfully calculate the desired offline route, so the next chat must distinguish: (a) basemap tiles present, (b) Valhalla routing tiles present and recognized, and (c) geocoder data present. Do not assume that seeing the offline map proves offline routing coverage.
+
+## NEXT IMPLEMENTATION ORDER AFTER THIS HANDOFF
+
+1. Preserve the current stable stock baseline and do not change it destructively.
+2. Read this project log, root `README.md`, and especially `cardinal-android/AGENTS.md` before coding.
+3. Fix the high-level `DirectionsViewModel.getFerrostarWrapper()` mapping so `RoutingMode.TRUCK` uses `ferrostarWrapperRepository.truck`.
+4. Build a minimal Truck-fix APK and retest the known Poznań restriction point with the existing Truck profile and real dimensions. Do not add BUS in the same build; isolate the Truck fix first.
+5. Capture fresh routing logs/bugreport if needed and resolve the `truck_traffic` versus plain `truck` compatibility only if the corrected Truck wrapper still fails.
+6. Separately design the offline selector as `Europe -> country` using the existing country bounds + downloader architecture; do not subdivide into voivodeships/Länder unless forced by technical limits. First calculate practical storage/download sizes and verify that Valhalla tiles are downloaded for the same country coverage.
+7. Only after Truck is proven, add a new true BUS routing mode at the same high-level profile/request layer. Do not implement BUS as a renamed Truck or Car.
+8. Before coding BUS, verify from current Valhalla/Stadia/Ferrostar source/docs exactly which BUS costing/profile and vehicle fields are supported by the hosted endpoint.
+9. User requirement for BUS UI: normal tourist/coach BUS by default plus a simple `Line Bus` switch. `Line Bus` means city/route-service bus semantics that may use bus-only/bus-lane access when supported; switch off means tourist coach semantics that must not automatically inherit city line-bus privileges. Verify backend semantics rather than inventing parameter names.
+10. Add BUS support through the existing architecture: `RoutingMode`, routing options, profile repository serialization, Ferrostar wrapper repository, Valhalla costing profile, Directions selector, and existing Profile Editor UI. Preserve working navigation UI, voice, arrows, rerouting and current map behavior.
