@@ -29,3 +29,10 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - `STADIA_API_KEY` integration.
 - Branding changes beyond what is strictly required to build.
 - Feature changes of any kind.
+
+## 2026-09-03 — bootstrap experiment 1 failed before any source import
+
+- GitHub Actions run: `33772893036`.
+- Result: workflow failed before jobs were created; no Murena source was imported and no application code was changed.
+- Cause: invalid YAML in the first bootstrap workflow. A shell heredoc embedded in a YAML block had unindented Markdown lines, so GitHub could not parse the job definition.
+- Fix: replaced the heredoc with an indented shell `echo` block. This is an infrastructure-only correction; it does not modify Murena functionality.
