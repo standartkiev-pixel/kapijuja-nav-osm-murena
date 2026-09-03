@@ -10,6 +10,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/build-stock-murena-apk.yml'
+      - '.github/keys/kapijuja-ci-debug.keystore'
 
 permissions:
   contents: read
@@ -18,6 +19,8 @@ env:
   ANDROID_NDK_VERSION: '29.0.14206865'
   ANDROID_CMAKE_VERSION: '3.22.1'
   GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
+  VERSION_CODE: ${{ github.run_number }}
+  VERSION_NAME: critical-${{ github.run_number }}
 
 jobs:
   build-arm64-debug:
@@ -29,6 +32,15 @@ jobs:
     steps:
       - name: Checkout canonical Murena/Kapijuja source
         uses: actions/checkout@v4
+
+      - name: Install stable Kapijuja CI debug signing key
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$HOME/.android"
+          cp "$GITHUB_WORKSPACE/.github/keys/kapijuja-ci-debug.keystore" "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
 
       - name: Prepare upstream Murena Android/Rust environment
         shell: bash
