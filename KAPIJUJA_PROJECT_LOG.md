@@ -36,3 +36,16 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - Result: workflow failed before jobs were created; no Murena source was imported and no application code was changed.
 - Cause: invalid YAML in the first bootstrap workflow. A shell heredoc embedded in a YAML block had unindented Markdown lines, so GitHub could not parse the job definition.
 - Fix: replaced the heredoc with an indented shell `echo` block. This is an infrastructure-only correction; it does not modify Murena functionality.
+
+## 2026-09-03 — bootstrap experiment 2 imported upstream locally but push was rejected
+
+- GitHub Actions run: `33773010011`; job: `100707712860`.
+- Official upstream clone completed successfully from `https://gitlab.e.foundation/e/os/maps`.
+- Exact upstream commit cloned: `f9a061aff58ec7f11dc7fa19bd0138720fc99b01`.
+- Upstream commit date: `2026-09-03T15:21:13Z`.
+- Upstream commit subject: `Translated using Weblate (Portuguese (Brazil))`.
+- Git LFS assets downloaded successfully, including the bundled map MBTiles assets.
+- The runner created local import commit `6044b8e` containing 1,252 files and 150,013 inserted lines.
+- The final push was rejected as non-fast-forward because this project log was updated on `main` while the import workflow was still running. This was a repository bookkeeping race, not a Murena source/build failure.
+- No Murena source from that runner commit reached `main`.
+- Fix for the next bootstrap: base the generated import commit on the latest `origin/main` immediately before committing/pushing, and do not make parallel repository writes during the import.
