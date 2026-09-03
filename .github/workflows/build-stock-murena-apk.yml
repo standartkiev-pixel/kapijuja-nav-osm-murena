@@ -1,4 +1,4 @@
-name: Build stock Murena Maps ARM64 debug APK
+name: Build Kapijuja Murena ARM64 debug APK
 
 on:
   workflow_dispatch:
@@ -20,14 +20,14 @@ env:
   GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
 
 jobs:
-  build-stock-arm64-debug:
+  build-arm64-debug:
     runs-on: ubuntu-latest
     container:
       image: cimg/android:2026.07.1-ndk
     timeout-minutes: 90
 
     steps:
-      - name: Checkout clean Murena snapshot
+      - name: Checkout canonical Murena/Kapijuja source
         uses: actions/checkout@v4
 
       - name: Prepare upstream Murena Android/Rust environment
@@ -73,7 +73,7 @@ jobs:
           echo "Imported Murena upstream repository: $(cat UPSTREAM_MURENA_REPOSITORY)"
           git lfs ls-files
 
-      - name: Generate stock upstream hidden Stadia secret source
+      - name: Generate hidden Stadia secret source
         working-directory: cardinal-android
         shell: bash
         env:
@@ -95,7 +95,7 @@ jobs:
           set -euxo pipefail
           ./gradlew generateUniFFIBindings --stacktrace --no-daemon 2>&1 | tee ../generate-uniffi.log
 
-      - name: Build unmodified stock ARM64 debug APK
+      - name: Build ARM64 debug APK
         working-directory: cardinal-android
         shell: bash
         run: |
@@ -109,20 +109,20 @@ jobs:
           set -euxo pipefail
           find cardinal-android/app/build/outputs/apk/arm64/debug -maxdepth 1 -type f -name '*.apk' -print -exec ls -lh {} \; -exec sha256sum {} \;
 
-      - name: Upload stock Murena ARM64 debug APK
+      - name: Upload Kapijuja online vehicle test APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Kapijuja-Murena-stock-arm64-debug
+          name: Kapijuja-Murena-Online-Truck-Bus-arm64-debug
           path: cardinal-android/app/build/outputs/apk/arm64/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload baseline build logs
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Kapijuja-Murena-stock-build-logs
+          name: Kapijuja-Murena-Online-Truck-Bus-build-logs
           path: |
             generate-uniffi.log
             build-arm64-debug.log
