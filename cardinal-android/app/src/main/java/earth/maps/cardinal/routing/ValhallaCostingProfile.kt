@@ -38,7 +38,7 @@ sealed class ValhallaCostingProfile(
     ) {
         companion object {
             val Standard = AutoTraffic(ProfileFamilies.AUTO_TRAFFIC_PROFILE_PREFIX)
-            val Premium = AutoTraffic(TrafficEtaCalibration.AUTO_TRAFFIC_PROFILE)
+            val Premium = AutoTraffic("${ProfileFamilies.AUTO_TRAFFIC_PROFILE_PREFIX}_premium")
 
             fun fromRouteProviderProfile(routeProviderProfile: String): AutoTraffic =
                 AutoTraffic(routeProviderProfile)
@@ -65,9 +65,25 @@ sealed class ValhallaCostingProfile(
     ) {
         companion object {
             val Standard = TruckTraffic(ProfileFamilies.TRUCK_TRAFFIC_PROFILE_PREFIX)
+            val Premium = TruckTraffic("${ProfileFamilies.TRUCK_TRAFFIC_PROFILE_PREFIX}_premium")
 
             fun fromRouteProviderProfile(routeProviderProfile: String): TruckTraffic =
                 TruckTraffic(routeProviderProfile)
+        }
+    }
+
+    class BusTraffic private constructor(routeProviderProfile: String) : ValhallaCostingProfile(
+        routeProviderProfile = routeProviderProfile,
+        costingOptionsKey = BusRoutingOptions.COSTING_TYPE_BUS,
+        safeLogProfileClass = BusRoutingOptions.COSTING_TYPE_BUS,
+        usesTraffic = true
+    ) {
+        companion object {
+            val Standard = BusTraffic(ProfileFamilies.BUS_TRAFFIC_PROFILE_PREFIX)
+            val Premium = BusTraffic("${ProfileFamilies.BUS_TRAFFIC_PROFILE_PREFIX}_premium")
+
+            fun fromRouteProviderProfile(routeProviderProfile: String): BusTraffic =
+                BusTraffic(routeProviderProfile)
         }
     }
 
@@ -117,10 +133,10 @@ sealed class ValhallaCostingProfile(
             routeProviderProfile == Pedestrian.routeProviderProfile -> Pedestrian
             ProfileFamilies.isAutoTrafficProfile(routeProviderProfile) ->
                 AutoTraffic.fromRouteProviderProfile(routeProviderProfile)
-
             ProfileFamilies.isTruckTrafficProfile(routeProviderProfile) ->
                 TruckTraffic.fromRouteProviderProfile(routeProviderProfile)
-
+            ProfileFamilies.isBusTrafficProfile(routeProviderProfile) ->
+                BusTraffic.fromRouteProviderProfile(routeProviderProfile)
             else -> Custom.fromRouteProviderProfile(routeProviderProfile)
         }
     }
@@ -128,12 +144,16 @@ sealed class ValhallaCostingProfile(
     private object ProfileFamilies {
         const val AUTO_TRAFFIC_PROFILE_PREFIX = "auto_traffic"
         const val TRUCK_TRAFFIC_PROFILE_PREFIX = "truck_traffic"
+        const val BUS_TRAFFIC_PROFILE_PREFIX = "bus_traffic"
 
         fun isAutoTrafficProfile(routeProviderProfile: String): Boolean =
             routeProviderProfile.matchesProfileFamily(AUTO_TRAFFIC_PROFILE_PREFIX)
 
         fun isTruckTrafficProfile(routeProviderProfile: String): Boolean =
             routeProviderProfile.matchesProfileFamily(TRUCK_TRAFFIC_PROFILE_PREFIX)
+
+        fun isBusTrafficProfile(routeProviderProfile: String): Boolean =
+            routeProviderProfile.matchesProfileFamily(BUS_TRAFFIC_PROFILE_PREFIX)
 
         private fun String.matchesProfileFamily(prefix: String): Boolean =
             this == prefix || startsWith("${prefix}_")
