@@ -19,6 +19,7 @@ class HeavyVehicleDefaultsTest {
         assertEquals(0.0, options.useLivingStreets!!, 0.0)
         assertTrue(options.excludeUnpaved == true)
         assertEquals(300.0, options.lowClassPenalty!!, 0.0)
+        assertEquals(600.0, options.destinationOnlyPenalty!!, 0.0)
     }
 
     @Test
@@ -32,6 +33,7 @@ class HeavyVehicleDefaultsTest {
         assertFalse(options.lineBus)
         assertEquals(0.0, options.useLivingStreets!!, 0.0)
         assertTrue(options.excludeUnpaved == true)
+        assertEquals(600.0, options.destinationOnlyPenalty!!, 0.0)
     }
 
     @Test
@@ -45,6 +47,7 @@ class HeavyVehicleDefaultsTest {
         assertTrue(json.contains("\"height\":4.0"))
         assertTrue(json.contains("\"weight\":18.0"))
         assertTrue(json.contains("\"service_penalty\":300"))
+        assertTrue(json.contains("\"destination_only_penalty\":600"))
         assertFalse(json.contains("\"service_penalty\":300.0"))
         assertTrue(json.contains("\"maneuver_penalty\":45"))
     }
@@ -55,6 +58,7 @@ class HeavyVehicleDefaultsTest {
             costingProfileOverride = ValhallaCostingProfile.Truck
         )
         assertTrue(json.contains("\"low_class_penalty\":300"))
+        assertTrue(json.contains("\"destination_only_penalty\":600"))
         assertFalse(json.contains("\"low_class_penalty\":300.0"))
         assertTrue(json.contains("\"use_truck_route\":1.0"))
         assertTrue(json.contains("\"axle_count\":3"))
