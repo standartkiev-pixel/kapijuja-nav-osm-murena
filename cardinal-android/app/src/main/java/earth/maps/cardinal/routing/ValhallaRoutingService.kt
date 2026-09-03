@@ -87,7 +87,7 @@ class ValhallaRoutingService(
     ): String {
         try {
             val config = appPreferenceRepository.valhallaApiConfig.value
-            val url = if (config.apiKey != null) {
+            val url = if (!config.apiKey.isNullOrBlank()) {
                 "${config.baseUrl}?api_key=${config.apiKey}"
             } else {
                 config.baseUrl
@@ -140,6 +140,9 @@ class ValhallaRoutingService(
      * when the closest edge itself has HGV access restrictions. A small candidate radius lets
      * Valhalla choose a nearby edge which is actually legal for the truck costing model.
      *
+     * Traffic costings use names such as truck_traffic_premium, but they are still Truck
+     * costings and need exactly the same waypoint correlation treatment as plain truck.
+     *
      * This does NOT disable or soften truck restrictions: the costing model still decides
      * which candidate edges are legal. It only broadens waypoint-to-road correlation.
      */
@@ -147,7 +150,7 @@ class ValhallaRoutingService(
         return try {
             val root = Json.parseToJsonElement(request).jsonObject
             val costing = root["costing"]?.jsonPrimitive?.content ?: return request
-            if (costing != TruckRoutingOptions.COSTING_TYPE_TRUCK) {
+            if (!isTruckCostingProfile(costing)) {
                 return request
             }
 
@@ -176,4 +179,10 @@ class ValhallaRoutingService(
             request
         }
     }
+}
+
+internal fun isTruckCostingProfile(costing: String): Boolean {
+    val profile = ValhallaCostingProfile.fromRouteProviderProfile(costing)
+    return profile === ValhallaCostingProfile.Truck ||
+        profile is ValhallaCostingProfile.TruckTraffic
 }
