@@ -20,7 +20,7 @@ env:
   ANDROID_CMAKE_VERSION: '3.22.1'
   GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
   VERSION_CODE: ${{ github.run_number }}
-  VERSION_NAME: critical-${{ github.run_number }}
+  VERSION_NAME: kapijuja-final-${{ github.run_number }}
 
 jobs:
   build-arm64-debug:
@@ -85,20 +85,12 @@ jobs:
           echo "Imported Murena upstream repository: $(cat UPSTREAM_MURENA_REPOSITORY)"
           git lfs ls-files
 
-      - name: Generate hidden Stadia secret source
+      - name: Configure Android SDK path
         working-directory: cardinal-android
         shell: bash
-        env:
-          STADIA_KEY: ${{ secrets.STADIA_API_KEY }}
         run: |
           set -euxo pipefail
-          test -n "$STADIA_KEY"
           echo "sdk.dir=${ANDROID_HOME}" > local.properties
-          ./gradlew :app:hideSecret \
-            -Pkey="$STADIA_KEY" \
-            -Ppackage=earth.maps.cardinal \
-            -PkeyName=StadiaKey \
-            --no-daemon
 
       - name: Generate upstream Rust UniFFI bindings
         working-directory: cardinal-android
@@ -106,6 +98,13 @@ jobs:
         run: |
           set -euxo pipefail
           ./gradlew generateUniFFIBindings --stacktrace --no-daemon 2>&1 | tee ../generate-uniffi.log
+
+      - name: Run ARM64 unit tests
+        working-directory: cardinal-android
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew testArm64DebugUnitTest --stacktrace --no-daemon 2>&1 | tee ../test-arm64-debug.log
 
       - name: Build ARM64 debug APK
         working-directory: cardinal-android
@@ -125,7 +124,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Kapijuja-Murena-Online-Truck-Bus-arm64-debug
+          name: Kapijuja-Murena-Final-arm64-debug
           path: cardinal-android/app/build/outputs/apk/arm64/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -134,9 +133,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Kapijuja-Murena-Online-Truck-Bus-build-logs
+          name: Kapijuja-Murena-Final-build-logs
           path: |
             generate-uniffi.log
+            test-arm64-debug.log
             build-arm64-debug.log
           if-no-files-found: warn
           retention-days: 14
