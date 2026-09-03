@@ -233,9 +233,13 @@ class DirectionsViewModel @Inject constructor(
 
     private fun getFerrostarWrapper() = when (selectedRoutingMode) {
         RoutingMode.AUTO -> ferrostarWrapperRepository.driving
+        RoutingMode.TRUCK -> ferrostarWrapperRepository.truck
+        RoutingMode.BUS -> ferrostarWrapperRepository.bus
+        RoutingMode.MOTOR_SCOOTER -> ferrostarWrapperRepository.motorScooter
+        RoutingMode.MOTORCYCLE -> ferrostarWrapperRepository.motorcycle
         RoutingMode.PEDESTRIAN -> ferrostarWrapperRepository.walking
         RoutingMode.BICYCLE -> ferrostarWrapperRepository.cycling
-        else -> ferrostarWrapperRepository.driving
+        RoutingMode.PUBLIC_TRANSPORT -> ferrostarWrapperRepository.driving
     }
 
     private fun createWaypoints(destination: Place) = listOf(
@@ -323,9 +327,10 @@ class DirectionsViewModel @Inject constructor(
      */
     fun getAvailableRoutingModes() = combine(
         routingProfileRepository.getProfilesForMode(RoutingMode.TRUCK),
+        routingProfileRepository.getProfilesForMode(RoutingMode.BUS),
         routingProfileRepository.getProfilesForMode(RoutingMode.MOTOR_SCOOTER),
         routingProfileRepository.getProfilesForMode(RoutingMode.MOTORCYCLE)
-    ) { truckProfiles, motorScooterProfiles, motorcycleProfiles ->
+    ) { truckProfiles, busProfiles, motorScooterProfiles, motorcycleProfiles ->
         val modes = mutableListOf(
             RoutingMode.AUTO,
             RoutingMode.PUBLIC_TRANSPORT,
@@ -336,6 +341,9 @@ class DirectionsViewModel @Inject constructor(
         // Add conditional modes only if they have custom profiles
         if (truckProfiles.isNotEmpty()) {
             modes.add(RoutingMode.TRUCK)
+        }
+        if (busProfiles.isNotEmpty()) {
+            modes.add(RoutingMode.BUS)
         }
         if (motorScooterProfiles.isNotEmpty()) {
             modes.add(RoutingMode.MOTOR_SCOOTER)

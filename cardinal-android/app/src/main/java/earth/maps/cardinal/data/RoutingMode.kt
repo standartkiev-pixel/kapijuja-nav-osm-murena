@@ -23,6 +23,7 @@ import earth.maps.cardinal.R.drawable
 enum class RoutingMode(val value: String, val label: String, val icon: Int) {
     AUTO("auto", "Driving", drawable.mode_car),
     TRUCK("truck", "Truck", drawable.mode_truck),
+    BUS("bus", "Bus", drawable.ic_bus_railway),
     MOTOR_SCOOTER("motor_scooter", "Motor Scooter", drawable.mode_moped),
     MOTORCYCLE("motorcycle", "Motorcycle", drawable.mode_motorcycle),
     BICYCLE("bicycle", "Cycling", drawable.mode_bike),

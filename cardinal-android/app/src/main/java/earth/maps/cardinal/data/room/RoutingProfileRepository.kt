@@ -22,6 +22,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
 import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.routing.AutoRoutingOptions
+import earth.maps.cardinal.routing.BusRoutingOptions
 import earth.maps.cardinal.routing.CyclingRoutingOptions
 import earth.maps.cardinal.routing.MotorScooterRoutingOptions
 import earth.maps.cardinal.routing.MotorcycleRoutingOptions
@@ -251,6 +252,7 @@ class RoutingProfileRepository @Inject constructor(
         return when (routingMode) {
             RoutingMode.AUTO -> AutoRoutingOptions()
             RoutingMode.TRUCK -> TruckRoutingOptions()
+            RoutingMode.BUS -> BusRoutingOptions()
             RoutingMode.MOTOR_SCOOTER -> MotorScooterRoutingOptions()
             RoutingMode.MOTORCYCLE -> MotorcycleRoutingOptions()
             RoutingMode.BICYCLE -> CyclingRoutingOptions()
@@ -267,6 +269,7 @@ class RoutingProfileRepository @Inject constructor(
             when (routingMode) {
                 "auto" -> gson.fromJson(optionsJson, AutoRoutingOptions::class.java)
                 "truck" -> gson.fromJson(optionsJson, TruckRoutingOptions::class.java)
+                "bus" -> gson.fromJson(optionsJson, BusRoutingOptions::class.java)
                 "motor_scooter" -> gson.fromJson(
                     optionsJson,
                     MotorScooterRoutingOptions::class.java

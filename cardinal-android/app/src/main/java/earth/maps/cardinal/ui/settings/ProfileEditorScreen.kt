@@ -71,6 +71,7 @@ import earth.maps.cardinal.R.string
 import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.routing.AutoOptions
 import earth.maps.cardinal.routing.AutoRoutingOptions
+import earth.maps.cardinal.routing.BusRoutingOptions
 import earth.maps.cardinal.routing.BicycleType
 import earth.maps.cardinal.routing.CyclingRoutingOptions
 import earth.maps.cardinal.routing.MotorScooterRoutingOptions
@@ -442,6 +443,80 @@ private fun TruckOptionsEditor(
             0f..1f,
             valueFormatter = { it.format(2) }) { value ->
             onOptionsChanged(options.copy(useTruckRoute = value))
+        }
+    }
+}
+
+@Composable
+private fun BusOptionsEditor(
+    options: BusRoutingOptions,
+    onOptionsChanged: (BusRoutingOptions) -> Unit
+) {
+    CommonAutoOptionsEditor(
+        options = options,
+        onUseHighwaysChanged = { value -> onOptionsChanged(options.copy(useHighways = value)) },
+        onUseTollsChanged = { value -> onOptionsChanged(options.copy(useTolls = value)) },
+        onUseLivingStreetsChanged = { value -> onOptionsChanged(options.copy(useLivingStreets = value)) },
+        onUseTracksChanged = { value -> onOptionsChanged(options.copy(useTracks = value)) },
+        onExcludeUnpavedChanged = { value -> onOptionsChanged(options.copy(excludeUnpaved = value)) },
+        onExcludeCashOnlyTollsChanged = { value ->
+            onOptionsChanged(options.copy(excludeCashOnlyTolls = value))
+        },
+        onManeuverPenaltyChanged = { value -> onOptionsChanged(options.copy(maneuverPenalty = value)) },
+        onGateCostChanged = { value -> onOptionsChanged(options.copy(gateCost = value)) },
+        onPrivateAccessPenaltyChanged = { value ->
+            onOptionsChanged(options.copy(privateAccessPenalty = value))
+        },
+        onIgnoreClosuresChanged = { value -> onOptionsChanged(options.copy(ignoreClosures = value)) },
+        onIgnoreRestrictionsChanged = { value -> onOptionsChanged(options.copy(ignoreRestrictions = value)) },
+        onIgnoreOneWaysChanged = { value -> onOptionsChanged(options.copy(ignoreOneWays = value)) },
+        onIgnoreAccessChanged = { value -> onOptionsChanged(options.copy(ignoreAccess = value)) }
+    )
+
+    OptionsSection("Vehicle Dimensions") {
+        SliderOption(
+            "Length (m)",
+            options.length,
+            1f..50f,
+            valueFormatter = { it.format(1) }) { value ->
+            onOptionsChanged(options.copy(length = value))
+        }
+        SliderOption(
+            "Width (m)",
+            options.width,
+            1f..5f,
+            valueFormatter = { it.format(1) }) { value ->
+            onOptionsChanged(options.copy(width = value))
+        }
+        SliderOption(
+            "Height (m)",
+            options.height,
+            1f..10f,
+            valueFormatter = { it.format(1) }) { value ->
+            onOptionsChanged(options.copy(height = value))
+        }
+        SliderOption(
+            "Weight (tons)",
+            options.weight,
+            0.1f..100f,
+            valueFormatter = { it.format(1) }) { value ->
+            onOptionsChanged(options.copy(weight = value))
+        }
+    }
+
+    OptionsSection("Bus Type") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Line Bus")
+            Switch(
+                checked = options.lineBus,
+                onCheckedChange = { enabled ->
+                    onOptionsChanged(options.copy(lineBus = enabled))
+                }
+            )
         }
     }
 }
@@ -965,6 +1040,7 @@ private fun ProfileEditorContent(
         when (selectedMode) {
             RoutingMode.AUTO -> AutoOptionsEditor(routingOptions as AutoRoutingOptions, onRoutingOptionsChange)
             RoutingMode.TRUCK -> TruckOptionsEditor(routingOptions as TruckRoutingOptions, onRoutingOptionsChange)
+            RoutingMode.BUS -> BusOptionsEditor(routingOptions as BusRoutingOptions, onRoutingOptionsChange)
             RoutingMode.MOTOR_SCOOTER -> MotorScooterOptionsEditor(routingOptions as MotorScooterRoutingOptions, onRoutingOptionsChange)
             RoutingMode.MOTORCYCLE -> MotorcycleOptionsEditor(routingOptions as MotorcycleRoutingOptions, onRoutingOptionsChange)
             RoutingMode.BICYCLE -> CyclingOptionsEditor(routingOptions as CyclingRoutingOptions, onRoutingOptionsChange)

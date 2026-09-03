@@ -98,6 +98,7 @@ fun TurnByTurnNavigationScreen(
         RoutingMode.PEDESTRIAN -> ferrostarWrapperRepository.walking
         RoutingMode.BICYCLE -> ferrostarWrapperRepository.cycling
         RoutingMode.TRUCK -> ferrostarWrapperRepository.truck
+        RoutingMode.BUS -> ferrostarWrapperRepository.bus
         RoutingMode.MOTOR_SCOOTER -> ferrostarWrapperRepository.motorScooter
         RoutingMode.MOTORCYCLE -> ferrostarWrapperRepository.motorcycle
         else -> null

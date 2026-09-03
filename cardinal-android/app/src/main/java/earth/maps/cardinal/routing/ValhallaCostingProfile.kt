@@ -51,6 +51,12 @@ sealed class ValhallaCostingProfile(
         safeLogProfileClass = TruckRoutingOptions.COSTING_TYPE_TRUCK
     )
 
+    object Bus : ValhallaCostingProfile(
+        routeProviderProfile = BusRoutingOptions.COSTING_TYPE_BUS,
+        costingOptionsKey = BusRoutingOptions.COSTING_TYPE_BUS,
+        safeLogProfileClass = BusRoutingOptions.COSTING_TYPE_BUS
+    )
+
     class TruckTraffic private constructor(routeProviderProfile: String) : ValhallaCostingProfile(
         routeProviderProfile = routeProviderProfile,
         costingOptionsKey = TruckRoutingOptions.COSTING_TYPE_TRUCK,
@@ -104,6 +110,7 @@ sealed class ValhallaCostingProfile(
         fun fromRouteProviderProfile(routeProviderProfile: String): ValhallaCostingProfile = when {
             routeProviderProfile == Auto.routeProviderProfile -> Auto
             routeProviderProfile == Truck.routeProviderProfile -> Truck
+            routeProviderProfile == Bus.routeProviderProfile -> Bus
             routeProviderProfile == MotorScooter.routeProviderProfile -> MotorScooter
             routeProviderProfile == Motorcycle.routeProviderProfile -> Motorcycle
             routeProviderProfile == Bicycle.routeProviderProfile -> Bicycle

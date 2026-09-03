@@ -284,3 +284,17 @@ The user reported that the offline area he tried did not successfully calculate 
 8. Before coding BUS, verify from current Valhalla/Stadia/Ferrostar source/docs exactly which BUS costing/profile and vehicle fields are supported by the hosted endpoint.
 9. User requirement for BUS UI: normal tourist/coach BUS by default plus a simple `Line Bus` switch. `Line Bus` means city/route-service bus semantics that may use bus-only/bus-lane access when supported; switch off means tourist coach semantics that must not automatically inherit city line-bus privileges. Verify backend semantics rather than inventing parameter names.
 10. Add BUS support through the existing architecture: `RoutingMode`, routing options, profile repository serialization, Ferrostar wrapper repository, Valhalla costing profile, Directions selector, and existing Profile Editor UI. Preserve working navigation UI, voice, arrows, rerouting and current map behavior.
+
+
+## 2026-09-03 — online professional vehicle routing patch
+
+- Offline routing/download code is deliberately untouched in this stage.
+- Fixed Directions wrapper selection so `TRUCK` uses the already-existing dedicated Truck Ferrostar wrapper instead of falling through to Driving.
+- Added driver-controlled `BUS` routing mode, profile persistence, editor support, dedicated Ferrostar wrapper and turn-by-turn wrapper selection.
+- `BusRoutingOptions` exposes the shared motor-vehicle controls plus physical length/width/height/weight. Truck-only Hazmat / truck-route controls are not copied into Bus.
+- Added `Line Bus` switch, default OFF.
+- `Line Bus = ON` selects real Valhalla `bus` costing (bus/PSV access semantics).
+- `Line Bus = OFF` selects Valhalla `auto` access semantics while retaining the configured coach dimensions/weight; this prevents a tourist coach from automatically gaining bus-only/busway access in the stock hosted Valhalla model.
+- `lineBus` is application policy only and is removed from outgoing Valhalla `costing_options`; no invented backend JSON field is used.
+- Current upstream Valhalla OpenAPI documents `bus` as using `AutoCostingOptions`, which include height, width, length and weight.
+- For this first correctness build, live traffic aliases remain enabled only for normal Driving. Truck and Bus use plain `truck` / `bus` or coach `auto` profiles to isolate vehicle/access semantics from the previously observed `truck_traffic` HTTP 400 path.

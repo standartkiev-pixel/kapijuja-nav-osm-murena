@@ -87,7 +87,7 @@ class FerrostarWrapper(
         get() = currentValhallaCostingProfile.routeProviderProfile
 
     private val currentValhallaCostingProfile: ValhallaCostingProfile
-        get() = mode.valhallaCostingProfile(isTrafficEnabled)
+        get() = mode.valhallaCostingProfile(isTrafficEnabled, previousRouteOptions)
 
     val etaCorrectionFactor: Double
         get() = TrafficEtaCalibration.factorForProfile(
@@ -210,7 +210,7 @@ class FerrostarWrapper(
         trafficEnabled: Boolean = isTrafficEnabled,
         includeForegroundServiceManager: Boolean = true
     ): FerrostarCore {
-        val costingProfile = mode.valhallaCostingProfile(trafficEnabled)
+        val costingProfile = mode.valhallaCostingProfile(trafficEnabled, routingOptions)
         val profile = costingProfile.routeProviderProfile
         return FerrostarCore(
             routeAdapter = RouteAdapter.fromWellKnownRouteProvider(WellKnownRouteProvider.Valhalla(
@@ -344,13 +344,20 @@ internal fun correctiveActionForConnectivity(
         CorrectiveAction.DoNothing
     }
 
-fun RoutingMode.supportsTraffic(): Boolean = this == RoutingMode.AUTO || this == RoutingMode.TRUCK
+fun RoutingMode.supportsTraffic(): Boolean = this == RoutingMode.AUTO
 
-fun RoutingMode.valhallaCostingProfile(useTraffic: Boolean): ValhallaCostingProfile = when {
+fun RoutingMode.valhallaCostingProfile(
+    useTraffic: Boolean,
+    routingOptions: RoutingOptions? = null
+): ValhallaCostingProfile = when {
     useTraffic && this == RoutingMode.AUTO -> ValhallaCostingProfile.AutoTraffic.Premium
-    useTraffic && this == RoutingMode.TRUCK -> ValhallaCostingProfile.TruckTraffic.Standard
+    this == RoutingMode.BUS && (routingOptions as? BusRoutingOptions)?.lineBus == true ->
+        ValhallaCostingProfile.Bus
+    this == RoutingMode.BUS -> ValhallaCostingProfile.Auto
     else -> ValhallaCostingProfile.fromRouteProviderProfile(value)
 }
 
-fun RoutingMode.valhallaProfile(useTraffic: Boolean): String =
-    valhallaCostingProfile(useTraffic).routeProviderProfile
+fun RoutingMode.valhallaProfile(
+    useTraffic: Boolean,
+    routingOptions: RoutingOptions? = null
+): String = valhallaCostingProfile(useTraffic, routingOptions).routeProviderProfile

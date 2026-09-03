@@ -24,6 +24,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.data.room.RoutingProfileRepository
 import earth.maps.cardinal.routing.AutoRoutingOptions
+import earth.maps.cardinal.routing.BusRoutingOptions
 import earth.maps.cardinal.routing.CyclingRoutingOptions
 import earth.maps.cardinal.routing.MotorScooterRoutingOptions
 import earth.maps.cardinal.routing.MotorcycleRoutingOptions
@@ -158,6 +159,7 @@ class ProfileEditorViewModel @Inject constructor(
         return when (mode) {
             RoutingMode.AUTO -> AutoRoutingOptions()
             RoutingMode.TRUCK -> TruckRoutingOptions()
+            RoutingMode.BUS -> BusRoutingOptions()
             RoutingMode.MOTOR_SCOOTER -> MotorScooterRoutingOptions()
             RoutingMode.MOTORCYCLE -> MotorcycleRoutingOptions()
             RoutingMode.BICYCLE -> CyclingRoutingOptions()

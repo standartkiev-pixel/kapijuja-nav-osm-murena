@@ -43,6 +43,7 @@ class FerrostarWrapperRepository @Inject constructor(
     private var _cycling: FerrostarWrapper? = null
     private var _driving: FerrostarWrapper? = null
     private var _truck: FerrostarWrapper? = null
+    private var _bus: FerrostarWrapper? = null
     private var _motorScooter: FerrostarWrapper? = null
     private var _motorcycle: FerrostarWrapper? = null
 
@@ -50,6 +51,7 @@ class FerrostarWrapperRepository @Inject constructor(
     val cycling: FerrostarWrapper get() = _cycling ?: throw IllegalStateException("Cycling wrapper not initialized")
     val driving: FerrostarWrapper get() = _driving ?: throw IllegalStateException("Driving wrapper not initialized")
     val truck: FerrostarWrapper get() = _truck ?: throw IllegalStateException("Truck wrapper not initialized")
+    val bus: FerrostarWrapper get() = _bus ?: throw IllegalStateException("Bus wrapper not initialized")
     val motorScooter: FerrostarWrapper get() = _motorScooter ?: throw IllegalStateException("MotorScooter wrapper not initialized")
     val motorcycle: FerrostarWrapper get() = _motorcycle ?: throw IllegalStateException("Motorcycle wrapper not initialized")
 
@@ -88,6 +90,10 @@ class FerrostarWrapperRepository @Inject constructor(
         )
         _truck = factory.create(
             mode = RoutingMode.TRUCK,
+            endpoint = endpoint
+        )
+        _bus = factory.create(
+            mode = RoutingMode.BUS,
             endpoint = endpoint
         )
         _motorScooter = factory.create(
@@ -168,6 +174,7 @@ class FerrostarWrapperRepository @Inject constructor(
         RoutingMode.BICYCLE -> _cycling
         RoutingMode.AUTO -> _driving
         RoutingMode.TRUCK -> _truck
+        RoutingMode.BUS -> _bus
         RoutingMode.MOTOR_SCOOTER -> _motorScooter
         RoutingMode.MOTORCYCLE -> _motorcycle
         else -> null

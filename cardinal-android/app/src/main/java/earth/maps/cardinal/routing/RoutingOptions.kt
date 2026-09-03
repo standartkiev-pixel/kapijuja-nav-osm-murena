@@ -41,6 +41,9 @@ abstract class RoutingOptions {
             .create()
         val options = gson.toJsonTree(this@RoutingOptions).asJsonObject.apply {
             remove("costing_type")
+            // App-only selector: it chooses coach (auto access) vs line bus (bus access).
+            // It is not a Valhalla costing option and must never be sent to the API.
+            remove("line_bus")
         }
         val wrapper = object {
             val alternates = 5
@@ -148,6 +151,49 @@ data class TruckRoutingOptions(
 
     companion object {
         const val COSTING_TYPE_TRUCK = "truck"
+        const val DEFAULT_GATE_COST = 45.0
+        const val DEFAULT_TOLL_BOOTH_COST = 30.0
+    }
+}
+
+/**
+ * Routing options for a driver-controlled bus/coach.
+ *
+ * Current Valhalla BusCost uses AutoCostingOptions, including physical vehicle
+ * height, width, length and weight. lineBus is an app-side selector:
+ * false = tourist coach (auto access semantics with bus dimensions),
+ * true = line/service bus (Valhalla bus access semantics).
+ */
+data class BusRoutingOptions(
+    override val costingType: String = COSTING_TYPE_BUS,
+
+    // Basic motor-vehicle options
+    override val maneuverPenalty: Double? = null,
+    override val gateCost: Double? = DEFAULT_GATE_COST,
+    override val tollBoothCost: Double? = DEFAULT_TOLL_BOOTH_COST,
+    override val privateAccessPenalty: Double? = null,
+    override val useHighways: Double? = null,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = null,
+    override val useTracks: Double? = null,
+    override val ignoreClosures: Boolean? = null,
+    override val ignoreRestrictions: Boolean? = null,
+    override val ignoreOneWays: Boolean? = null,
+    override val ignoreAccess: Boolean? = null,
+    override val excludeUnpaved: Boolean? = null,
+    override val excludeCashOnlyTolls: Boolean? = null,
+
+    // Physical vehicle restrictions supported by Valhalla AutoCost/BusCost
+    val length: Double? = null, // meters
+    val width: Double? = null,
+    val height: Double? = null,
+    val weight: Double? = null, // metric tons
+
+    // App-only policy selector. Not serialized into Valhalla costing_options.
+    val lineBus: Boolean = false
+) : RoutingOptions(), AutoOptions {
+    companion object {
+        const val COSTING_TYPE_BUS = "bus"
         const val DEFAULT_GATE_COST = 45.0
         const val DEFAULT_TOLL_BOOTH_COST = 30.0
     }
