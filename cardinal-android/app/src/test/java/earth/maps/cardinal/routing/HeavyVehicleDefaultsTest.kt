@@ -44,7 +44,9 @@ class HeavyVehicleDefaultsTest {
         assertTrue(json.contains("\"width\":2.5"))
         assertTrue(json.contains("\"height\":4.0"))
         assertTrue(json.contains("\"weight\":18.0"))
-        assertTrue(json.contains("\"service_penalty\":300.0"))
+        assertTrue(json.contains("\"service_penalty\":300"))
+        assertFalse(json.contains("\"service_penalty\":300.0"))
+        assertTrue(json.contains("\"maneuver_penalty\":45"))
     }
 
     @Test
@@ -52,7 +54,8 @@ class HeavyVehicleDefaultsTest {
         val json = TruckRoutingOptions().toValhallaOptionsJson(
             costingProfileOverride = ValhallaCostingProfile.Truck
         )
-        assertTrue(json.contains("\"low_class_penalty\":300.0"))
+        assertTrue(json.contains("\"low_class_penalty\":300"))
+        assertFalse(json.contains("\"low_class_penalty\":300.0"))
         assertTrue(json.contains("\"use_truck_route\":1.0"))
         assertTrue(json.contains("\"axle_count\":3"))
         assertTrue(json.contains("\"closure_factor\":10.0"))

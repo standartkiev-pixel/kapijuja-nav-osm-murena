@@ -50,12 +50,25 @@ abstract class RoutingOptions {
                 remove("axle_count")
             }
 
-            // Stadia's current hosted Valhalla request schema requires these time costs
-            // as JSON integers. The profile editor stores them as Double for sliders,
-            // so normalize them only at the API boundary. Sending 45.0/30.0 causes
-            // HTTP 400 ("expected i32") before routing is attempted.
-            normalizeIntegerCost("gate_cost")
-            normalizeIntegerCost("toll_booth_cost")
+            // Stadia's hosted route schema represents second-based costs/penalties as i32.
+            // Profile sliders remain Double in the app, but 300.0 is rejected before
+            // routing (HTTP 400: expected i32). Normalize only at the HTTP API boundary.
+            listOf(
+                "maneuver_penalty",
+                "gate_cost",
+                "gate_penalty",
+                "toll_booth_cost",
+                "toll_booth_penalty",
+                "private_access_penalty",
+                "destination_only_penalty",
+                "service_penalty",
+                "alley_penalty",
+                "low_class_penalty",
+                "country_crossing_cost",
+                "country_crossing_penalty",
+                "ferry_cost",
+                "rail_ferry_cost"
+            ).forEach(::normalizeIntegerCost)
         }
         val wrapper = object {
             val alternates = 5
