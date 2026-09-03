@@ -20,6 +20,7 @@ package earth.maps.cardinal.ui.directions
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -116,29 +118,20 @@ fun DirectionsScreen(
 
     var fieldFocusState by remember { mutableStateOf(FieldFocusState.NONE) }
     val isAnyFieldFocused = fieldFocusState != FieldFocusState.NONE
-
-    // Track pending location request for auto-retry after permission grant
     var pendingLocationRequest by remember { mutableStateOf<FieldFocusState?>(null) }
     var pendingNavigationStart by remember { mutableStateOf(false) }
-
-    // Get route result from ViewModel
     val routeState by viewModel.routeState.collectAsState(initial = RouteState())
-
     val savedPlaces by viewModel.savedPlaces.collectAsState(initial = emptyList())
-
     val coroutineScope = rememberCoroutineScope()
 
     val bottomPadding: Dp = with(LocalDensity.current) {
-        // TODO: Find out if there's a way to get the safe drawing insets without the IME insets.
         max(0, WindowInsets.safeDrawing.getBottom(this) - WindowInsets.ime.getBottom(this)).toDp()
     }
 
     LaunchedEffect(Unit) {
-        // Run this in our coroutine scope rather than viewModelScope.
         viewModel.initializeRoutingMode()
     }
 
-    // Auto-retry location request when permissions are granted
     AutoRetryMyLocation(
         hasLocationPermission = hasLocationPermission,
         pendingLocationRequest = pendingLocationRequest,
@@ -214,12 +207,9 @@ private fun AutoRetryMyLocation(
     LaunchedEffect(hasLocationPermission, pendingLocationRequest) {
         if (hasLocationPermission && pendingLocationRequest != null) {
             val targetField = pendingLocationRequest
-
-            // Automatically fetch location for the target field
             coroutineScope.launch {
                 val myLocationPlace = viewModel.getCurrentLocationAsPlace()
                 myLocationPlace?.let { place ->
-                    // Update the appropriate place based on which field was focused
                     if (targetField == FieldFocusState.FROM) {
                         viewModel.updateFromPlace(place)
                     } else {
@@ -281,10 +271,8 @@ private fun DirectionsScreenFullUI(
     onPendingNavigationChange: (Boolean) -> Unit,
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
-
     val coroutineScope = rememberCoroutineScope()
 
-    // Show full UI when no field is focused
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -292,7 +280,6 @@ private fun DirectionsScreenFullUI(
                 val heightInDp = with(density) { coordinates.size.height.toDp() }
                 onPeekHeightChange(heightInDp)
             }) {
-        // Header with back button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -312,11 +299,9 @@ private fun DirectionsScreenFullUI(
                 style = MaterialTheme.typography.headlineSmall
             )
 
-            // Spacer to balance the row
             Box(modifier = Modifier.size(48.dp))
         }
 
-        // From and To fields
         PlaceField(
             label = stringResource(string.from),
             place = viewModel.fromPlace,
@@ -375,7 +360,6 @@ private fun DirectionsScreenFullUI(
             availableProfiles = availableProfiles
         )
 
-        // Inset horizontal divider
         HorizontalDivider(
             modifier = Modifier
                 .fillMaxWidth()
@@ -385,7 +369,6 @@ private fun DirectionsScreenFullUI(
         )
     }
 
-    // Route results
     DirectionsRouteResults(
         viewModel = viewModel,
         routeState = routeState,
@@ -468,7 +451,6 @@ private fun TransitRouteResults(
         }
 
         else -> {
-            // No plan calculated yet
             Text(
                 text = stringResource(string.enter_start_and_end_locations_to_get_directions),
                 modifier = Modifier
@@ -529,7 +511,6 @@ private fun NonTransitRouteResults(
         }
 
         else -> {
-            // No route calculated yet
             Text(
                 text = stringResource(string.enter_start_and_end_locations_to_get_directions),
                 modifier = Modifier
@@ -550,7 +531,6 @@ private fun DirectionsScreenFocusedField(
     onRequestLocationPermission: () -> Unit,
     coroutineScope: CoroutineScope
 ) {
-    // Show only the focused field and search results when a field is focused
     SearchPlaceField(
         label = if (fieldFocusState == FieldFocusState.FROM) "From" else "To",
         place = if (fieldFocusState == FieldFocusState.FROM) viewModel.fromPlace else viewModel.toPlace,
@@ -575,7 +555,6 @@ private fun DirectionsScreenFocusedField(
             .padding(bottom = 8.dp)
     )
 
-    // Show search results or quick suggestions based on search query
     FocusedFieldContent(
         viewModel = viewModel,
         fieldFocusState = fieldFocusState,
@@ -598,10 +577,7 @@ private fun FocusedFieldContent(
     coroutineScope: CoroutineScope
 ) {
     when {
-        viewModel.isSearching -> {
-            SearchingIndicator()
-        }
-
+        viewModel.isSearching -> SearchingIndicator()
         viewModel.searchQuery.isEmpty() -> {
             QuickSuggestionsContent(
                 viewModel = viewModel,
@@ -613,7 +589,6 @@ private fun FocusedFieldContent(
                 onFieldFocusStateChange = onFieldFocusStateChange,
             )
         }
-
         else -> {
             SearchResultsContent(
                 viewModel = viewModel,
@@ -672,9 +647,7 @@ private fun SearchResultsContent(
             onFieldFocusStateChange(FieldFocusState.NONE)
         },
         expandedResultsAvailable = viewModel.expandedResultsAvailable,
-        onShowExpandedResults = {
-            viewModel.rerunWithoutAutocomplete()
-        },
+        onShowExpandedResults = { viewModel.rerunWithoutAutocomplete() },
         modifier = Modifier.fillMaxWidth()
     )
 }
@@ -687,7 +660,6 @@ private fun updatePlaceForField(
     } else {
         viewModel.updateToPlace(place)
     }
-    // Track as recent search when selected from search results
     viewModel.onPlaceSelectedFromSearch(place)
 }
 
@@ -712,11 +684,6 @@ private fun handleMyLocationSelected(
     }
 }
 
-/**
- * Handles route display and camera animation for the directions screen.
- * This composable manages the route state and automatically animates the camera
- * to show the full route when it's calculated.
- */
 @Composable
 fun RouteDisplayHandler(
     viewModel: DirectionsViewModel,
@@ -730,7 +697,6 @@ fun RouteDisplayHandler(
     val selectedMode = viewModel.selectedRoutingMode
     val coroutineScope = rememberCoroutineScope()
 
-    // Update the route state and animate camera when route changes
     LaunchedEffect(
         selectedRoute,
         selectedMode,
@@ -744,7 +710,6 @@ fun RouteDisplayHandler(
                 routeState.isTrafficAvailable,
                 routeState.etaCorrectionFactor
             )
-            // Animate camera to show the full route when it's calculated
             selectedRoute?.let { route ->
                 val coordinates = route.geometry
                 if (coordinates.isNotEmpty()) {
@@ -831,10 +796,8 @@ private fun PlaceField(
                         }
                     }
                 },
-                placeholder = {
-                    Text(stringResource(string.enter_a_place))
-                },
-                readOnly = false, // Make sure the field is editable to show keyboard
+                placeholder = { Text(stringResource(string.enter_a_place)) },
+                readOnly = false,
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = MaterialTheme.colorScheme.primary,
                     unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -852,9 +815,7 @@ private fun PlaceField(
                 }
             }
             if (showFlipButton) {
-                IconButton(
-                    onClick = onFlipClick, enabled = !isRouteLoading
-                ) {
+                IconButton(onClick = onFlipClick, enabled = !isRouteLoading) {
                     Icon(
                         painter = painterResource(drawable.swap_vertical),
                         contentDescription = stringResource(string.flip_destinations)
@@ -865,19 +826,15 @@ private fun PlaceField(
     }
 
     if (isFocused) {
-        BackHandler {
-            onTextFieldFocusChange(false)
-        }
+        BackHandler { onTextFieldFocusChange(false) }
     }
 
-    // Request focus when the field should be focused
     LaunchedEffect(isFocused) {
         if (isFocused) {
             focusRequester.requestFocus()
         }
     }
 
-    // Update textFieldValue when place changes
     LaunchedEffect(place) {
         textFieldValue = place?.name ?: ""
     }
@@ -890,7 +847,7 @@ private fun RoutingModeSelector(
     onModeSelected: (RoutingMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SegmentedButtonRow(
+    ScrollableRoutingModeRow(
         availableModes = availableModes,
         selectedMode = selectedMode,
         onModeSelected = onModeSelected,
@@ -900,22 +857,29 @@ private fun RoutingModeSelector(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun SegmentedButtonRow(
+private fun ScrollableRoutingModeRow(
     availableModes: List<RoutingMode>,
     selectedMode: RoutingMode,
     onModeSelected: (RoutingMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
-        availableModes.forEachIndexed { index, mode ->
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        availableModes.forEach { mode ->
             ToggleButton(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = dimensionResource(dimen.padding) / 2),
+                modifier = Modifier.size(58.dp),
                 checked = mode == selectedMode,
                 onCheckedChange = { if (it) onModeSelected(mode) },
             ) {
-                Icon(painter = painterResource(mode.icon), contentDescription = mode.label)
+                Icon(
+                    painter = painterResource(mode.icon),
+                    contentDescription = mode.label,
+                    modifier = Modifier.size(30.dp)
+                )
             }
         }
     }
@@ -934,24 +898,16 @@ private fun RoutingProfileSelector(
         availableProfiles.isNotEmpty(),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        // Add "Default" option at the beginning
-        val profileOptions = listOf(null) + availableProfiles
-
-        SingleChoiceSegmentedButtonRow(
-            modifier = modifier.fillMaxWidth()
-        ) {
-            profileOptions.forEach { profile ->
-                val isSelected = selectedProfile?.id == profile?.id
-                val label = profile?.name ?: stringResource(string.default_profile)
-
+        SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+            availableProfiles.forEach { profile ->
                 ToggleButton(
                     modifier = Modifier
                         .padding(horizontal = dimensionResource(dimen.padding_minor) / 2)
                         .weight(1f),
-                    checked = isSelected,
+                    checked = selectedProfile?.id == profile.id,
                     onCheckedChange = { if (it) viewModel.selectRoutingProfile(profile) },
                 ) {
-                    Text(text = label)
+                    Text(text = profile.name)
                 }
             }
         }
@@ -991,13 +947,9 @@ private fun FerrostarRouteResults(
                                 .padding(bottom = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            Text(text = "Distance:", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                text = "Distance:", style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                text = GeoUtils.formatDistance(
-                                    ferrostarRoute.distance, distanceUnit
-                                ),
+                                text = GeoUtils.formatDistance(ferrostarRoute.distance, distanceUnit),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1013,9 +965,7 @@ private fun FerrostarRouteResults(
                                 .padding(bottom = dimensionResource(dimen.padding)),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = "Duration:", style = MaterialTheme.typography.bodyLarge
-                            )
+                            Text(text = "Duration:", style = MaterialTheme.typography.bodyLarge)
                             Text(
                                 text = formatDuration(totalDuration),
                                 style = MaterialTheme.typography.bodyLarge,
@@ -1024,9 +974,9 @@ private fun FerrostarRouteResults(
                         }
 
                         Button(
-                            onClick = {
-                                onPendingNavigationChange(true)
-                            }, modifier = Modifier.fillMaxWidth(), enabled = true
+                            onClick = { onPendingNavigationChange(true) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = true
                         ) {
                             Text(stringResource(string.start_navigation))
                         }
@@ -1034,7 +984,6 @@ private fun FerrostarRouteResults(
                 }
             }
 
-            // Actual route steps
             items(ferrostarRoute.steps.size) { index ->
                 val step = ferrostarRoute.steps[index]
                 Card(
@@ -1049,19 +998,15 @@ private fun FerrostarRouteResults(
                             .padding(dimensionResource(dimen.padding)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Step number
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
                                 .padding(4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "${index + 1}", style = MaterialTheme.typography.labelLarge
-                            )
+                            Text(text = "${index + 1}", style = MaterialTheme.typography.labelLarge)
                         }
 
-                        // Step instruction
                         Text(
                             text = step.instruction,
                             style = MaterialTheme.typography.bodyMedium,
@@ -1070,7 +1015,6 @@ private fun FerrostarRouteResults(
                                 .padding(horizontal = dimensionResource(dimen.padding))
                         )
 
-                        // Step distance
                         Text(
                             text = GeoUtils.formatDistance(step.distance, distanceUnit),
                             style = MaterialTheme.typography.bodySmall,
@@ -1082,7 +1026,6 @@ private fun FerrostarRouteResults(
         }
     }
 
-    // Dialogs
     ProfileSelectionDialog(
         showDialog = showProfileDialog,
         onDismiss = { showProfileDialog = false },
@@ -1100,7 +1043,7 @@ private fun ProfileSelectionDialog(
     onDismiss: () -> Unit,
     selectedProfile: RoutingProfile?,
     availableProfiles: List<RoutingProfile>,
-    onProfileSelected: (RoutingProfile?) -> Unit
+    onProfileSelected: (RoutingProfile) -> Unit
 ) {
     if (showDialog) {
         AlertDialog(
@@ -1108,17 +1051,6 @@ private fun ProfileSelectionDialog(
             title = { Text(stringResource(string.select_routing_profile)) },
             text = {
                 Column {
-                    // Default option
-                    TextButton(
-                        onClick = { onProfileSelected(null) }, modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(string.default_profile),
-                            color = if (selectedProfile == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    // Custom profiles
                     availableProfiles.forEach { profile ->
                         TextButton(
                             onClick = { onProfileSelected(profile) },
