@@ -17,53 +17,60 @@ permissions:
 env:
   ANDROID_NDK_VERSION: '29.0.14206865'
   ANDROID_CMAKE_VERSION: '3.22.1'
+  GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
 
 jobs:
   build-stock-arm64-debug:
     runs-on: ubuntu-latest
+    container:
+      image: cimg/android:2026.07.1-ndk
     timeout-minutes: 90
 
     steps:
-      - name: Checkout clean Murena snapshot including Git LFS assets
+      - name: Checkout clean Murena snapshot
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-          cache-dependency-path: cardinal-android/**/*.gradle*
-
-      - name: Set up Android command line tools
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 37, NDK and CMake used by upstream
-        shell: bash
-        run: |
-          set -euxo pipefail
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager \
-            'platforms;android-37' \
-            'build-tools;37.0.0' \
-            "ndk;${ANDROID_NDK_VERSION}" \
-            "cmake;${ANDROID_CMAKE_VERSION}"
-          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
-          echo "NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
-
-      - name: Install Rust build prerequisites
+      - name: Prepare the same Android/Rust environment used by upstream Murena CI
         shell: bash
         run: |
           set -euxo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq protobuf-compiler
-          rustup toolchain install stable --profile minimal
-          rustup default stable
+          sudo apt-get install -y -qq git-lfs curl unzip protobuf-compiler
+          git lfs install --local
+          git lfs pull
+
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          java -version
+          sdkmanager --version
+          ls -la "${ANDROID_HOME}/platforms" || true
+
+          if [ ! -d "${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" ]; then
+            yes | sdkmanager "ndk;${ANDROID_NDK_VERSION}" || true
+          fi
+          if [ ! -d "${ANDROID_HOME}/cmake/${ANDROID_CMAKE_VERSION}" ]; then
+            yes | sdkmanager "cmake;${ANDROID_CMAKE_VERSION}" || true
+          fi
+
+          test -d "${ANDROID_HOME}/platforms/android-37"
+          test -d "${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}"
+          test -d "${ANDROID_HOME}/cmake/${ANDROID_CMAKE_VERSION}"
+
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+          if ! command -v rustc >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
           rustup target add aarch64-linux-android x86_64-linux-android
-          cargo install cargo-ndk --locked
+          if ! cargo ndk --version >/dev/null 2>&1; then
+            cargo install cargo-ndk
+          fi
+          rustc --version
+          cargo --version
+          cargo ndk --version
 
       - name: Verify imported upstream provenance
         shell: bash
@@ -81,6 +88,7 @@ jobs:
         run: |
           set -euxo pipefail
           test -n "$STADIA_KEY"
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
           ./gradlew :app:hideSecret \
             -Pkey="$STADIA_KEY" \
             -Ppackage=earth.maps.cardinal \
@@ -92,7 +100,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          ./gradlew generateUniFFIBindings --stacktrace --no-daemon
+          ./gradlew generateUniFFIBindings --stacktrace --no-daemon 2>&1 | tee ../generate-uniffi.log
 
       - name: Build unmodified stock ARM64 debug APK
         working-directory: cardinal-android
@@ -117,11 +125,13 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload baseline build log
+      - name: Upload baseline build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Kapijuja-Murena-stock-build-log
-          path: build-arm64-debug.log
+          name: Kapijuja-Murena-stock-build-logs
+          path: |
+            generate-uniffi.log
+            build-arm64-debug.log
           if-no-files-found: warn
           retention-days: 14
