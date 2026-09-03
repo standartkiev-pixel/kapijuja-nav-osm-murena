@@ -93,3 +93,62 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - This failure was introduced by our CI diagnostic, not by Murena source code.
 - The container also reports `NDK_STABLE_VERSION=29.0.14206865`, matching upstream Murena's requested NDK.
 - Fix: remove our hard-coded platform-directory assertion and follow Murena's own `.gitlab-ci.yml` build sequence without inventing additional SDK-name assumptions.
+
+## 2026-09-03 — verification after the earlier bootstrap race
+
+- A second AI inspected this repository while the long bootstrap/import work was still in progress and correctly noticed that one earlier import push had lost a non-fast-forward race.
+- That observation described the intermediate state, not the final repository state.
+- The final successful bootstrap run `33773338841`, job `100708822209`, subsequently imported the full source snapshot.
+- The successful bootstrap log records `1252 files changed, 150014 insertions(+)`.
+- Git LFS then uploaded all three tracked LFS objects successfully: `3/3`, approximately 79 MB total.
+- The final push succeeded: `61d3514..0adf78d HEAD -> main`.
+- The current repository tree contains the complete `cardinal-android`, `cardinal-geocoder`, Cargo workspace, assets/resources and other upstream source trees expected from the pinned Murena snapshot.
+- Conclusion: the race was real in an earlier failed attempt, but it did **not** leave the current Murena source snapshot incomplete.
+
+## 2026-09-03 — baseline build experiment 3: SUCCESS, full clean Murena ARM64 debug APK
+
+- GitHub Actions run: `33774447697`; job: `100712528955`.
+- Build commit: `1b5cbefb81b8cf5055fc769028bdc310b9aaf9e5`.
+- Result: **SUCCESS**.
+- The build used the same `cimg/android:2026.07.1-ndk` family and upstream build sequence as Murena's GitLab CI.
+- All important stages completed successfully: checkout, Android/Rust environment, upstream provenance verification, upstream `hideSecret`, Rust/UniFFI generation, `assembleArm64Debug`, APK metadata generation and artifact upload.
+- No BUS profile, TRUCK profile, vehicle dimensions, branding patch or custom routing code was added to the application for this baseline.
+- GitHub artifact ID: `9901556940`.
+- Artifact name: `Kapijuja-Murena-stock-arm64-debug`.
+- APK filename inside the artifact: `app-arm64-debug.apk`.
+- Downloaded test copy name: `Kapijuja-Murena-stock-arm64-debug.apk`.
+- Exact APK size: `117,596,817` bytes (about 112 MiB / 118 MB decimal).
+- SHA-256: `2f51565267081910e3d2720e89570041dddf623b0bed8e308a646524e306362f`.
+- This is the ARM64 build intended for modern ARM64 Android phones/tablets, including the current Samsung test device.
+
+### Android compatibility note
+
+- `compileSdk = 37` only selects the Android API used to compile the source; it does **not** mean the APK requires Android 37.
+- `targetSdk = 36` controls the behavior/policy target for modern Android; it is not the minimum supported Android version.
+- `minSdk = 26` is the actual lower installation boundary of this clean upstream build: Android 8.0 / API 26 and newer.
+- There is no generic Gradle flag that truthfully makes an arbitrary modern Android app run on “all Android versions”. Supporting anything below API 26 would require lowering `minSdk` and then auditing Kotlin/Compose, libraries, native code and runtime API usage. That would be a separate compatibility port rather than a clean upstream baseline.
+- Therefore the baseline intentionally keeps upstream `minSdk 26`, `targetSdk 36`, `compileSdk 37`. Do not lower them before the clean application has been tested.
+- The previous separate MapLibre demo failure caused by a deprecated `targetSdk 23` is not applicable here: this Murena baseline already targets API 36.
+
+## NEXT CHAT / NEXT GATE — what to do after installing the clean baseline
+
+Do not begin BUS/TRUCK modifications until the following baseline test is completed and observations are recorded.
+
+1. Install `Kapijuja-Murena-stock-arm64-debug.apk` on the target ARM64 Android device.
+2. Confirm the app launches and the map renders.
+3. Check location permission/current-position behavior.
+4. Inspect the existing Settings screen and every routing-profile/profile-editor screen that is visible in the stock app.
+5. Test normal address/place search and saved places/favorites if available.
+6. Build an ordinary stock driving route without changing the profile model.
+7. Start turn-by-turn navigation and verify map following, maneuver banners, rerouting and TTS/voice.
+8. Note which existing controls/profile choices are already exposed by Murena. Screenshots are useful because they determine where BUS/TRUCK and vehicle parameters can later be inserted at the highest/safest UI/request layer.
+9. If installation or launch fails, collect a fresh Android bugreport immediately after reproducing the problem and diagnose the exact `PackageManager`/runtime failure before changing source code.
+10. Only after the clean baseline works, inspect the existing routing-profile model and Valhalla request builder to design BUS/TRUCK support. Prefer a high-level profile/request change; do not modify MapLibre/Ferrostar/native internals unless evidence proves it is required.
+
+### Later BUS phase, deliberately not started yet
+
+- Determine how stock Murena represents `driving`, walking, cycling and other costing profiles.
+- Add BUS/TRUCK only where those existing profiles naturally live.
+- For BUS, use true Valhalla `bus` costing rather than renaming `auto`/truck.
+- Add weight/height/width/length only after verifying the exact Valhalla/Stadia fields supported by the backend.
+- Preserve the clean baseline commit and APK as a permanent regression reference.
