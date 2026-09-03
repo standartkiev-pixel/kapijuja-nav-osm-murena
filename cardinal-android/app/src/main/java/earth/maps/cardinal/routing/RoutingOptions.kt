@@ -20,7 +20,9 @@ package earth.maps.cardinal.routing
 
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
+import kotlin.math.roundToInt
 
 /**
  * Base class for routing options that can be serialized to JSON for Valhalla API.
@@ -44,6 +46,13 @@ abstract class RoutingOptions {
             // App-only selector: it chooses coach (auto access) vs line bus (bus access).
             // It is not a Valhalla costing option and must never be sent to the API.
             remove("line_bus")
+
+            // Stadia's current hosted Valhalla request schema requires these time costs
+            // as JSON integers. The profile editor stores them as Double for sliders,
+            // so normalize them only at the API boundary. Sending 45.0/30.0 causes
+            // HTTP 400 ("expected i32") before routing is attempted.
+            normalizeIntegerCost("gate_cost")
+            normalizeIntegerCost("toll_booth_cost")
         }
         val wrapper = object {
             val alternates = 5
@@ -57,6 +66,13 @@ abstract class RoutingOptions {
             }
         }
         return gson.toJson(wrapper)
+    }
+
+    private fun JsonObject.normalizeIntegerCost(name: String) {
+        val value = get(name) ?: return
+        if (value.isJsonPrimitive && value.asJsonPrimitive.isNumber) {
+            addProperty(name, value.asDouble.roundToInt())
+        }
     }
 }
 
