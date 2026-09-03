@@ -292,11 +292,23 @@ class AppPreferenceRepository @Inject constructor(
     }
 
     fun setPeliasApiKey(apiKey: String?) {
+        val normalizedKey = apiKey?.takeIf { it.isNotBlank() }
         val currentConfig = _peliasApiConfig.value
-        val newConfig = ApiConfiguration(currentConfig.baseUrl, apiKey)
-        _peliasApiConfig.value = newConfig
+        val baseUrl = when {
+            normalizedKey != null &&
+                currentConfig.baseUrl == AppPreferences.DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY ->
+                AppPreferences.STADIA_PELIAS_ENDPOINT
+            normalizedKey == null &&
+                currentConfig.baseUrl == AppPreferences.STADIA_PELIAS_ENDPOINT ->
+                AppPreferences.DEFAULT_PELIAS_ENDPOINT_WITHOUT_API_KEY
+            else -> currentConfig.baseUrl
+        }
+        _peliasApiConfig.value = ApiConfiguration(baseUrl, normalizedKey)
         viewModelScope.launch {
-            appPreferences.savePeliasApiKey(apiKey)
+            if (baseUrl != currentConfig.baseUrl) {
+                appPreferences.savePeliasBaseUrl(baseUrl)
+            }
+            appPreferences.savePeliasApiKey(normalizedKey)
         }
     }
 
@@ -318,11 +330,28 @@ class AppPreferenceRepository @Inject constructor(
     }
 
     fun setValhallaApiKey(apiKey: String?) {
+        val normalizedKey = apiKey?.takeIf { it.isNotBlank() }
         val currentConfig = _valhallaApiConfig.value
-        val newConfig = ApiConfiguration(currentConfig.baseUrl, apiKey)
-        _valhallaApiConfig.value = newConfig
-        viewModelScope.launch {
-            appPreferences.saveValhallaApiKey(apiKey)
+        val baseUrl = when {
+            normalizedKey != null &&
+                currentConfig.baseUrl == AppPreferences.DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY ->
+                AppPreferences.STADIA_VALHALLA_ENDPOINT
+            normalizedKey == null &&
+                currentConfig.baseUrl == AppPreferences.STADIA_VALHALLA_ENDPOINT ->
+                AppPreferences.DEFAULT_VALHALLA_ENDPOINT_WITHOUT_API_KEY
+            else -> currentConfig.baseUrl
         }
+        _valhallaApiConfig.value = ApiConfiguration(baseUrl, normalizedKey)
+        viewModelScope.launch {
+            if (baseUrl != currentConfig.baseUrl) {
+                appPreferences.saveValhallaBaseUrl(baseUrl)
+            }
+            appPreferences.saveValhallaApiKey(normalizedKey)
+        }
+    }
+
+    fun resetApiConfigurationsToDefaults() {
+        appPreferences.resetApiConfigurationsToDefaults()
+        loadApiConfigurations()
     }
 }
