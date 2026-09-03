@@ -65,9 +65,9 @@ jobs:
             rm -f "$body"
           }
 
-          AUTO='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
-          TRUCK='{"height":4.0,"width":2.5,"length":16.5,"weight":45.0,"axle_count":3,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"low_class_penalty":300.0,"use_truck_route":1.0,"ignore_closures":false,"closure_factor":10.0}'
-          BUS='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300.0,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
+          AUTO='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
+          TRUCK='{"height":4.0,"width":2.5,"length":16.5,"weight":45.0,"axle_count":3,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300,"service_factor":5.0,"low_class_penalty":300,"use_truck_route":1.0,"ignore_closures":false,"closure_factor":10.0}'
+          BUS='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
 
           probe tourist_coach_auto_traffic_premium auto_traffic_premium auto "$AUTO"
           probe truck_traffic_premium truck_traffic_premium truck "$TRUCK"
