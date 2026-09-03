@@ -175,6 +175,9 @@ data class TruckRoutingOptions(
     // hard-ban the destination street, but make residential/service detours expensive.
     val servicePenalty: Double? = 300.0,
     val serviceFactor: Double? = 5.0,
+    // Keep destination/access-only streets available for a genuine last mile, but expensive.
+    // This never overrides maxheight/maxwidth/maxlength/maxweight or other hard restrictions.
+    val destinationOnlyPenalty: Double? = 600.0,
     val lowClassPenalty: Double? = 300.0,
     val closureFactor: Double? = 10.0,
 
@@ -227,6 +230,9 @@ data class BusRoutingOptions(
     val servicePenalty: Double? = 300.0,
     val serviceFactor: Double? = 5.0,
     val alleyFactor: Double? = 10.0,
+    // Tourist/line buses may use destination-only access for the final approach when OSM
+    // explicitly permits it. Physical dimension/mass limits remain enforced.
+    val destinationOnlyPenalty: Double? = 600.0,
     val closureFactor: Double? = 10.0,
 
     // Kapijuja tourist-coach baseline.
