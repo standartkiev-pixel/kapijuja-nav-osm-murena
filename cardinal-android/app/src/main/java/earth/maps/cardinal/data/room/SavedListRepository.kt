@@ -1,0 +1,392 @@
+/*
+ *     Cardinal Maps
+ *     Copyright (C) 2025 Cardinal Maps Authors
+ *
+ *     This program is free software: you can redistribute it and/or modify
+ *     it under the terms of the GNU General Public License as published by
+ *     the Free Software Foundation, either version 3 of the License, or
+ *     (at your option) any later version.
+ *
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ *     You should have received a copy of the GNU General Public License
+ *     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package earth.maps.cardinal.data.room
+
+import android.content.Context
+import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import earth.maps.cardinal.domain.sync.FavoritesFileSyncRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.withContext
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class SavedListRepository @Inject constructor(
+    @param:ApplicationContext private val context: Context,
+    database: AppDatabase,
+    private val favoritesFileSyncRepository: FavoritesFileSyncRepository,
+) {
+    private val listDao = database.savedListDao()
+    private val listItemDao = database.listItemDao()
+    private val placeDao = database.savedPlaceDao()
+
+    /**
+     * Creates a new list.
+     */
+    suspend fun createList(
+        name: String,
+        parentId: String,
+        description: String? = null,
+        isRoot: Boolean = false,
+        isCollapsed: Boolean = false
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val id = UUID.randomUUID().toString()
+            val timestamp = System.currentTimeMillis()
+            val list = SavedList(
+                id = id,
+                name = name,
+                description = description,
+                isRoot = isRoot,
+                isCollapsed = isCollapsed,
+                createdAt = timestamp,
+                updatedAt = timestamp
+            )
+
+            listDao.insertList(list)
+
+            val position = listItemDao.getItemsInList(parentId).size
+            listItemDao.insertItem(
+                ListItem(
+                    listId = parentId,
+                    itemId = id,
+                    itemType = ItemType.LIST,
+                    position = position,
+                    addedAt = System.currentTimeMillis()
+                )
+            )
+            exportFavoritesFile()
+            Result.success(id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Deletes a list.
+     */
+    suspend fun deleteList(listId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val list = listDao.getList(listId) ?: return@withContext Result.failure(
+                IllegalArgumentException("List not found")
+            )
+
+            listItemDao.orphanItem(listId, ItemType.LIST)
+            listDao.deleteList(list)
+            exportFavoritesFile()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Updates a list.
+     */
+    suspend fun updateList(
+        listId: String,
+        name: String? = null,
+        description: String? = null
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val existingList = listDao.getList(listId) ?: return@withContext Result.failure(
+                IllegalArgumentException("List not found")
+            )
+
+            val updatedList = existingList.copy(
+                name = name ?: existingList.name,
+                description = description ?: existingList.description,
+                updatedAt = System.currentTimeMillis()
+            )
+
+            listDao.updateList(updatedList)
+            exportFavoritesFile()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Gets a list by ID.
+     */
+    suspend fun getListById(listId: String): Result<SavedList?> = withContext(Dispatchers.IO) {
+        try {
+            val list = listDao.getList(listId)
+            Result.success(list)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun cleanupUnparentedElements() {
+        if (listDao.getRootList() == null) {
+            listDao.insertList(
+                SavedList.createList(
+                    context.getString(earth.maps.cardinal.R.string.saved_places_title_case),
+                    isRoot = true,
+                )
+            )
+        }
+        val rootList = listDao.getRootList()
+        if (rootList == null) {
+            Log.e(TAG, "Failed to find a root list immediately after ensuring one exists.")
+            return
+        }
+        val potentiallyUnparentedLists = listDao.getAllLists().map { it.id }.toMutableSet()
+        val potentiallyUnparentedPlaces = placeDao.getAllPlaces().map { it.id }.toMutableSet()
+        for (list in listDao.getAllLists()) {
+            if (list.isRoot) {
+                potentiallyUnparentedLists.remove(list.id)
+                continue
+            }
+            val listItems = listItemDao.getItemsInList(list.id)
+            for (listItem in listItems) {
+                potentiallyUnparentedLists.remove(listItem.itemId)
+                potentiallyUnparentedPlaces.remove(listItem.itemId)
+            }
+        }
+        for (unparentedList in potentiallyUnparentedLists) {
+            addItemToList(
+                rootList.id,
+                itemId = unparentedList,
+                itemType = ItemType.LIST,
+                exportAfterChange = false
+            )
+        }
+        for (unparentedPlace in potentiallyUnparentedPlaces) {
+            addItemToList(
+                rootList.id,
+                itemId = unparentedPlace,
+                itemType = ItemType.PLACE,
+                exportAfterChange = false
+            )
+        }
+    }
+
+    /**
+     * Gets the root list.
+     */
+    suspend fun getRootList(): Result<SavedList?> = withContext(Dispatchers.IO) {
+        try {
+            val list = listDao.getRootList()
+            Result.success(list)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Adds an item to a list.
+     */
+    suspend fun addItemToList(
+        listId: String,
+        itemId: String,
+        itemType: ItemType,
+        exportAfterChange: Boolean = true
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            // Get the current max position in the list
+            val currentItems = listItemDao.getItemsInList(listId)
+            val maxPosition = if (currentItems.isNotEmpty()) {
+                currentItems.maxByOrNull { it.position }?.position ?: -1
+            } else {
+                -1
+            }
+            val newPosition = maxPosition + 1
+
+            val listItem = ListItem(
+                listId = listId,
+                itemId = itemId,
+                itemType = itemType,
+                position = newPosition,
+                addedAt = System.currentTimeMillis()
+            )
+
+            listItemDao.insertItem(listItem)
+            if (exportAfterChange) {
+                exportFavoritesFile()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Reorders items in a list.
+     */
+    suspend fun reorderItems(
+        listId: String, items: List<ListItem>
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            listItemDao.reorderItems(listId, items)
+            exportFavoritesFile()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Gets the items in a list as ListItems.
+     */
+    suspend fun getItemsInList(listId: String): Result<List<ListItem>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val items = listItemDao.getItemsInList(listId)
+                Result.success(items)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /**
+     * Gets the item IDs in a list as a Flow.
+     */
+    fun getItemIdsInListAsFlow(listId: String): Flow<Set<String>> =
+        listItemDao.getItemsInListAsFlow(listId).map { items ->
+            items.map { it.itemId }.toSet()
+        }
+
+    /**
+     * Gets the hierarchical content of a list for UI display.
+     * Returns a flow of list of ListContent items (either PlaceContent or ListContentItem).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun getListContent(listId: String): Flow<List<Flow<ListContent?>>> =
+        listItemDao.getItemsInListAsFlow(listId).mapLatest { items ->
+            val flows = items.map { item ->
+                when (item.itemType) {
+                    ItemType.PLACE -> placeDao.getPlaceAsFlow(item.itemId).filterNotNull()
+                        .map { savedPlace ->
+                            PlaceContent(
+                                id = savedPlace.id,
+                                name = savedPlace.customName ?: savedPlace.name,
+                                type = savedPlace.type,
+                                icon = savedPlace.icon,
+                                customName = savedPlace.customName,
+                                customDescription = savedPlace.customDescription,
+                                isPinned = savedPlace.isPinned,
+                                position = item.position
+                            )
+                        }
+
+                    ItemType.LIST -> listDao.getListAsFlow(item.itemId).map { savedList ->
+                        savedList?.let {
+                            ListContentItem(
+                                id = it.id,
+                                name = it.name,
+                                description = it.description,
+                                isCollapsed = it.isCollapsed,
+                                position = item.position
+                            )
+                        }
+                    }
+                }
+            }
+            return@mapLatest flows
+        }
+
+    /**
+     * Checks if pasting the specified list items into the target list would create a cycle.
+     * A cycle occurs when a list is being pasted into itself or any of its sublists.
+     *
+     * @param targetListId The ID of the list where items would be pasted
+     * @param listIdsToPaste Set of list IDs that would be pasted
+     * @return true if pasting would create a cycle, false otherwise
+     */
+    suspend fun wouldCreateCycle(
+        targetListId: String,
+        listIdsToPaste: Set<String>
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // If no lists are being pasted, no cycle can be created
+            if (listIdsToPaste.isEmpty()) {
+                return@withContext false
+            }
+
+            // Check if any of the lists to paste is the target list itself
+            if (listIdsToPaste.contains(targetListId)) {
+                return@withContext true
+            }
+
+            // For each list being pasted, check if the target list is in its hierarchy
+            for (listId in listIdsToPaste) {
+                if (isListInHierarchy(targetListId, listId)) {
+                    return@withContext true
+                }
+            }
+
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking for cycle", e)
+            false // Default to allowing paste if there's an error
+        }
+    }
+
+    /**
+     * Recursively checks if targetListId is in the hierarchy of parentListId.
+     * This means targetListId is either parentListId itself or one of its descendants.
+     *
+     * @param targetListId The list ID we're looking for
+     * @param parentListId The list ID to start searching from
+     * @return true if targetListId is in the hierarchy of parentListId
+     */
+    private suspend fun isListInHierarchy(
+        targetListId: String,
+        parentListId: String
+    ): Boolean {
+        // Base case: if we found the target list
+        if (targetListId == parentListId) {
+            return true
+        }
+
+        // Get all child lists of the parent list
+        val childLists = listItemDao.getItemsInList(parentListId)
+            .filter { it.itemType == ItemType.LIST }
+
+        // Recursively check each child list
+        for (childListItem in childLists) {
+            if (isListInHierarchy(targetListId, childListItem.itemId)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private suspend fun exportFavoritesFile() {
+        favoritesFileSyncRepository.exportLocalDatabaseToFile()
+            .onFailure { exception ->
+                Log.w(TAG, "Saved lists changed but favorites file export failed", exception)
+            }
+    }
+
+    companion object {
+        private const val TAG = "SavedListRepository"
+    }
+}

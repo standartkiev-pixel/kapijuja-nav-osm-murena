@@ -1,0 +1,16 @@
+*.iml
+.gradle
+.agents
+/local.properties
+/.idea
+/.kotlin
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx/
+local.properties
+secrets.properties
+app/src/main/cpp/
+app/src/main/java/earth/maps/cardinal/Secrets.kt
+stadia-secrets.properties

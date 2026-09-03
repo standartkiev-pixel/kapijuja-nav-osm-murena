@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~     Cardinal Maps
+  ~     Copyright (C) 2025 Cardinal Maps Authors
+  ~
+  ~     This program is free software: you can redistribute it and/or modify
+  ~     it under the terms of the GNU General Public License as published by
+  ~     the Free Software Foundation, either version 3 of the License, or
+  ~     (at your option) any later version.
+  ~
+  ~     This program is distributed in the hope that it will be useful,
+  ~     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~     GNU General Public License for more details.
+  ~
+  ~     You should have received a copy of the GNU General Public License
+  ~     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<resources>
+    <string name="app_name" translatable="false">Murena Maps</string>
+
+    <string name="work">Work</string>
+    <string name="home">Home</string>
+    <string name="content_description_edit_saved_places">Edit Saved Places</string>
+    <string name="content_description_add_saved_place">Add Saved Place</string>
+    <string name="where_to">Where to?</string>
+    <string name="content_description_search">Search</string>
+    <string name="content_description_clear_search">Clear search</string>
+    <string name="saved_place_result">Saved place</string>
+    <string name="locate_me_content_description">Locate me</string>
+    <string name="favorites_screen">Favorites</string>
+    <string name="transit_screen">Transit</string>
+    <string name="nearby_screen">Nearby</string>
+    <string name="nearby_places">Nearby places</string>
+    <string name="error_loading_nearby_places">Error loading nearby places</string>
+    <string name="no_nearby_places_found">No nearby places found</string>
+    <string name="retry">Retry</string>
+
+    <!-- Murena file sync gate -->
+    <string name="murena_file_sync_progress_title" translatable="false">Murena Workspace</string>
+    <string name="murena_file_sync_welcome_title">Welcome to Maps</string>
+    <string name="murena_file_sync_account_message">Choose between syncing your favorites with an existing Murena account or keeping your favorites locally on your device.</string>
+    <string name="murena_file_sync_syncing_file">Syncing favorites...</string>
+    <string name="murena_file_sync_folder_access_message">Choose your Documents/Maps folder so Maps can create or update favorites.json.</string>
+    <string name="murena_file_sync_failed_message">Favorites could not be synced from the Documents/Maps file.</string>
+    <string name="murena_file_sync_sync_with_account">Sync with account</string>
+    <string name="murena_file_sync_choose_folder">Choose folder</string>
+    <string name="murena_file_sync_retry">Retry</string>
+    <string name="murena_file_sync_continue">Keep locally</string>
+    <string name="murena_file_sync_or">or</string>
+    <string name="murena_file_sync_folder_access_required">Maps needs access to Documents/Maps to create or sync favorites.json.</string>
+    <string name="murena_file_sync_file_sync_failed">Could not sync favorites from Documents/Maps/favorites.json.</string>
+
+    <!-- Place Card Screen -->
+    <string name="content_description_back">Back</string>
+    <string name="save_place">Favorite</string>
+    <string name="unsave_place">Unsave</string>
+    <string name="share_place">Share</string>
+    <string name="share_place_chooser_title">Share address</string>
+    <string name="get_directions">Directions</string>
+    <string name="cancel_button">Cancel</string>
+    <string name="delete_button">Delete</string>
+    <string name="discard_button">Discard</string>
+    <string name="dismiss_button">Dismiss</string>
+    <string name="switch_route">Switch route</string>
+    <string name="faster_route_available">Faster route available: saves %1$s</string>
+    <string name="navigation_offline_reroute_warning">Not connected to internet. Reroute will fail.</string>
+    <string name="are_you_sure_you_want_to_delete">Are you sure you want to delete \"%1$s\"?</string>
+    <string name="delete_place">Delete Place</string>
+    <string name="no_saved_places_yet">No saved places yet</string>
+    <string name="no_pinned_places_yet">No pinned places yet</string>
+    <string name="manage_favorites">Manage Favorites</string>
+    <string name="saved_places_title_case">Saved Places</string>
+    <string name="pinned_places_title_case">Pinned Places</string>
+    <string name="close_button">Close</string>
+
+    <!-- Manage Places Dialog -->
+    <string name="edit_place">Edit place</string>
+    <string name="edit_list">Edit list</string>
+    <string name="edit">Edit</string>
+    <string name="place_name">Place name</string>
+    <string name="place_description">Place description</string>
+    <string name="save_button">Save</string>
+    <string name="pin_place">Pin place</string>
+
+    <!-- Offline Areas -->
+    <string name="offline_areas_title">Manage Offline Map Downloads</string>
+    <string name="offline_areas_help_text">Download and manage map areas for offline use. Perfect for traveling without internet connectivity.</string>
+    <string name="contrast_settings_title">Contrast</string>
+    <string name="contrast_settings_help_text">Adjust the contrast level for better visibility</string>
+    <string name="contrast_standard">Standard</string>
+    <string name="contrast_medium">Medium</string>
+    <string name="contrast_high">High</string>
+
+    <!-- Animation Speed Settings -->
+    <string name="animation_speed_title">Map Animation Speed</string>
+    <string name="animation_speed_help_text">Adjust the speed of map animations</string>
+    <string name="animation_speed_slow">Slow</string>
+    <string name="animation_speed_normal">Normal</string>
+    <string name="animation_speed_fast">Fast</string>
+
+    <!-- Theme Mode Settings -->
+    <string name="theme_mode_dialog_title">New! %1$s is in dark theme</string>
+    <string name="theme_mode_dialog_message">Use %1$s in:</string>
+    <string name="theme_mode_settings_title">Theme</string>
+    <string name="theme_mode_settings_help_text">Choose how the app uses light and dark mode</string>
+    <string name="theme_mode_light">Always in light theme</string>
+    <string name="theme_mode_dark">Always in dark theme</string>
+    <string name="theme_mode_system">Same as device theme</string>
+
+    <string name="download_new_area">Download current viewport</string>
+    <string name="downloading">Downloading</string>
+    <string name="downloading_area">Downloading %1$s</string>
+    <string name="preparing_download">Preparing download…</string>
+    <string name="download_progress">%1$d / %2$d tiles</string>
+    <string name="saved_offline_areas">Saved Offline Areas</string>
+    <string name="no_offline_areas">No offline areas downloaded yet</string>
+    <string name="delete_area">Delete Area</string>
+    <string name="confirm_delete">Confirm Delete</string>
+    <string name="delete_area_confirmation">Are you sure you want to delete \"%1$s\"?</string>
+    <string name="status_label">Status: %1$s</string>
+    <string name="status_pending">Pending</string>
+    <string name="status_downloading_basemap">Downloading map data</string>
+    <string name="status_downloading_valhalla">Downloading routing data</string>
+    <string name="status_processing">Processing</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_failed">Failed</string>
+    <string name="downloaded_on">Downloaded on: %1$s</string>
+    <string name="zoom_levels">Zoom levels: %1$d - %2$d</string>
+    <string name="file_size">File size: %1$s</string>
+    <string name="area_name">Area Name</string>
+    <string name="area_bounds">Area Bounds</string>
+    <string name="min_zoom">Min Zoom</string>
+    <string name="max_zoom">Max Zoom</string>
+    <string name="estimated_tiles">Estimated tiles to download: %1$d</string>
+    <string name="download">Download</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="delete">Delete</string>
+    <string name="name_required">Name is required</string>
+    <string name="cardinal_maps_settings_heading" translatable="false">@string/app_name</string>
+
+    <!-- Offline Mode Settings -->
+    <string name="offline_mode_title">Offline Mode</string>
+    <string name="offline_mode_help_text">Enable offline mode to use downloaded map areas without an internet connection</string>
+    <string name="allow_transit_in_offline_mode_title">Transit Information in Offline Mode</string>
+    <string name="allow_transit_in_offline_mode_help_text">Allow fetching of transit information even while offline</string>
+    <string name="enabled">Enabled</string>
+    <string name="disabled">Disabled</string>
+
+    <!-- Tile Server URL -->
+    <string name="tile_url_template" translatable="false">https://tiles.maps.murena.com/tiles/planet-260112/planet/{z}/{x}/{y}.mvt</string>
+
+    <!-- Privacy and Accessibility Settings -->
+    <string name="privacy_settings_title">Offline Settings</string>
+    <string name="accessibility_settings_title">Accessibility</string>
+
+    <!-- Advanced Settings -->
+    <string name="advanced_settings_title">Advanced</string>
+    <string name="pelias_base_url_title">Pelias Base URL</string>
+    <string name="pelias_api_key_title">Pelias API Key</string>
+    <string name="valhalla_base_url_title">Valhalla Base URL</string>
+    <string name="valhalla_api_key_title">Valhalla API Key</string>
+    <string name="continuous_location_tracking_disabled_title">Continuous Location Tracking</string>
+    <string name="continuous_location_tracking_disabled_help_text">Turning this off can save battery</string>
+    <string name="show_zoom_fabs_title">Show Zoom Buttons</string>
+    <string name="show_zoom_fabs_help_text">Show zoom in/out buttons on the map</string>
+    <string name="routing_profiles_title">Routing Profiles</string>
+    <string name="content_description_collapse">Collapse</string>
+    <string name="content_description_expand">Expand</string>
+    <string name="enter_a_place">Enter a place</string>
+    <string name="route_summary">Route Summary</string>
+    <string name="start_navigation">Start Navigation</string>
+    <string name="my_location">My Location</string>
+    <string name="address_unavailable">Address unavailable</string>
+    <string name="searching_in_progress">Searching…</string>
+    <string name="calculating_route_in_progress">Calculating route…</string>
+    <string name="flip_destinations">Flip destinations</string>
+    <string name="recalculate_route">Recalculate route</string>
+    <string name="use_current_location">Use current location</string>
+    <string name="change_start_location_to_my_location">Navigation only available for routes from "My Location"</string>
+    <string name="back">Back</string>
+    <string name="add_profile">Add Profile</string>
+    <string name="enter_start_and_end_locations_to_get_directions">Enter start and end locations to get directions</string>
+    <string name="directions_error">Error: %1$s</string>
+    <string name="routing_profile">Routing Profile</string>
+    <string name="routing_mode">Routing Mode</string>
+    <string name="directions">Directions</string>
+    <string name="long_itinerary_error_message">This itinerary is too long</string>
+    <string name="unknown_error">Unknown error occurred</string>
+    <string name="routing_error_invalid_route_request">We couldn’t calculate a route with these locations. Try adjusting the start or destination.</string>
+    <string name="routing_error_route_not_found">We couldn’t find a route between these locations. Try a different start or destination.</string>
+    <string name="routing_error_connection_unavailable">Couldn’t reach the routing service. Check your internet connection or use a downloaded offline area.</string>
+    <string name="routing_error_request_timed_out">The routing request took too long. Check your connection and try again.</string>
+    <string name="routing_error_too_many_requests">The routing service is busy right now. Please try again in a moment.</string>
+    <string name="routing_error_service_settings">Routing isn’t available right now. Check your routing service settings.</string>
+    <string name="routing_error_server_unavailable">The routing service had a problem. Please try again later.</string>
+    <string name="routing_error_route_parsing_failed">We received route data we couldn’t read. Please try again.</string>
+    <string name="routing_error_unknown">We couldn’t calculate directions. Please try again.</string>
+    <string name="from">From</string>
+    <string name="to">To</string>
+    <string name="routing_profile_format">Profile: %1$s</string>
+    <string name="default_profile">Default Profile</string>
+    <string name="change_profile">Change</string>
+    <string name="select_routing_profile">Select Routing Profile</string>
+    <string name="cancel_change_routing_profile">Cancel</string>
+    <string name="downloading_basemap_tiles">Downloading basemap tiles…</string>
+    <string name="downloading_routing_tiles">Downloading routing tiles…</string>
+    <string name="processing_downloaded_tiles">Processing downloaded tiles…</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="paused">Paused</string>
+    <string name="status_paused">Paused</string>
+    <string name="zoom_in_to_download_an_area">Zoom in to download an area</string>
+    <string name="dropped_pin">Dropped Pin</string>
+    <string name="search_result_description">Search Result</string>
+    <string name="point_of_interest">Point of Interest</string>
+    <string name="create_and_manage_custom_routing_profiles">Create and manage custom routing profiles</string>
+    <string name="routing_profiles">Routing Profiles</string>
+    <string name="privacy_settings_summary">Manage your offline maps and settings</string>
+    <string name="accessibility_settings_summary">Adjust accessibility settings for better usability</string>
+    <string name="advanced_settings_summary">Configure advanced settings for the app</string>
+    <string name="app_name_long" translatable="false">@string/app_name</string>
+    <string name="open_cardinal_maps_github_repository_in_browser">Open cardinal maps GitHub repository in browser</string>
+    <string name="no_routing_profiles_configured_yet">No routing profiles configured yet.</string>
+    <string name="unnamed_location">Unnamed Location</string>
+    <string name="transit_stop">Transit stop</string>
+    <string name="unknown_departure">Unknown departure time</string>
+    <string name="transit_cancelled">Cancelled</string>
+    <string name="transit_on_time">On time</string>
+    <string name="transit_delayed">Delayed %1$s</string>
+    <string name="transit_mode_walk">Walk</string>
+    <string name="transit_mode_bike">Bike</string>
+    <string name="transit_mode_car">Car</string>
+    <string name="transit_mode_bus">Bus</string>
+    <string name="transit_mode_tram">Tram</string>
+    <string name="transit_mode_subway">Subway</string>
+    <string name="transit_mode_cable_car">Cable car</string>
+    <string name="transit_mode_rail">Rail</string>
+    <string name="transit_mode_ferry">Ferry</string>
+    <string name="transit_mode_airplane">Airplane</string>
+    <string name="transit_mode_rental">Rental</string>
+    <string name="transit_mode_flexible">Flexible transit</string>
+    <string name="transit_mode_transit">Transit</string>
+    <plurals name="transit_transfer_count">
+        <item quantity="one">%d transfer</item>
+        <item quantity="other">%d transfers</item>
+    </plurals>
+    <string name="transit_ride">Ride</string>
+    <plurals name="transit_ride_stop_count">
+        <item quantity="one">Ride %1$d stop</item>
+        <item quantity="other">Ride %1$d stops</item>
+    </plurals>
+    <plurals name="transit_stop_count">
+        <item quantity="one">%1$d stop</item>
+        <item quantity="other">%1$d stops</item>
+    </plurals>
+    <string name="transit_wait_up_to">, then wait up to %1$s</string>
+    <string name="transit_platform">Platform %1$s</string>
+    <string name="transit_to_headsign"> to %1$s</string>
+    <string name="transit_destination">Destination</string>
+    <string name="transit_stop_fallback">Stop</string>
+    <string name="transit_walk_overview">Walk %1$s%2$s</string>
+    <string name="transit_walk_segment">Walk %1$s%2$s%3$s</string>
+    <string name="transit_unknown_status">Unknown status</string>
+    <string name="next_departures">Nearby departures</string>
+    <string name="no_upcoming_departures">Couldn\'t find public transportation near you.</string>
+    <string name="live_indicator">Live ●</string>
+    <string name="live_indicator_short" translatable="false">●</string>
+    <string name="scheduled_indicator">Scheduled</string>
+    <string name="refresh_departures">Refresh departures</string>
+    <string name="refresh_nearby_places">Refresh nearby places</string>
+    <string name="loading_departures">Loading departures…</string>
+    <string name="failed_to_load_departures">Couldn\'t find any trips serving this stop</string>
+    <string name="content_description_edit_routing_profile">Edit routing profile</string>
+    <string name="content_description_delete_routing_profile">Delete routing profile</string>
+    <string name="content_description_next_page">Next page</string>
+    <string name="content_description_previous_page">Previous page</string>
+    <string name="remove_as_default">Remove as default</string>
+    <string name="set_as_default">Set as default</string>
+    <string name="add_save_places_and_they_ll_show_up_here">Favorite places and they\'ll show up here.</string>
+    <string name="content_description_select_all">Select all</string>
+    <string name="content_description_drag_to_reorder">Drag to reorder</string>
+    <string name="done">Done</string>
+    <string name="are_you_sure_you_want_to_delete_this_saved_place">Are you sure you want to delete this saved place?</string>
+    <string name="add_new_list">Add new list</string>
+    <string name="public_transportation_nearby">Public transportation nearby</string>
+    <string name="points_of_interest_nearby">Points of interest nearby</string>
+    <string name="settings_menu">Settings menu</string>
+    <string name="search">Search</string>
+    <string name="open_list">Open list</string>
+    <string name="saved_lists">Saved lists</string>
+    <string name="new_list">New list</string>
+    <string name="select_all">Select all</string>
+    <string name="deselect_all">Deselect all</string>
+    <string name="delete_confirmation_message">Are you sure you want to delete %1$d selected item(s)? This action cannot be undone.</string>
+    <string name="list_name">List name</string>
+    <string name="paste">Paste</string>
+    <string name="cut">Cut</string>
+    <string name="in_clipboard">in clipboard</string>
+    <string name="name">Name</string>
+    <string name="description">Description</string>
+    <string name="save">Save</string>
+    <string name="list_name_cannot_be_empty">List name cannot be empty</string>
+    <string name="square_char" translatable="false">■</string>
+    <string name="notification_ask_body">Murena Maps needs to send notifications to prevent navigation from being interrupted.</string>
+    <string name="notification_ask_title">Send Notifications</string>
+    <string name="got_it">Got it</string>
+    <string name="total_walking_distance">Total walking distance: %1$s</string>
+    <string name="journey_overview">Journey Overview</string>
+    <string name="depart">Depart: %1$s</string>
+    <string name="arrive">Arrive: %1$s</string>
+    <string name="stops">Stops:</string>
+    <string name="stops_qty">%1$d stops</string>
+    <string name="trip_details">Trip Details</string>
+    <string name="step_by_step_journey">Step-by-Step Journey</string>
+    <string name="distance_not_available">Distance not available</string>
+    <string name="current_speed_label">Speed</string>
+    <string name="speed_limit_label">Limit</string>
+    <string name="current_speed_content_description">Current speed: %1$s</string>
+    <string name="speed_limit_content_description">Speed limit: %1$s</string>
+    <string name="time_format_title">12/24 Hour Time</string>
+    <string name="time_format_help_text">Use 12-hour or 24-hour time format based on system setting</string>
+    <string name="distance_unit_title">Distance Unit</string>
+    <string name="distance_unit_help_text">Choose between metric or imperial units</string>
+    <string name="metric">Metric</string>
+    <string name="imperial">Imperial</string>
+    <string name="zoom_in">Zoom in</string>
+    <string name="zoom_out">Zoom out</string>
+    <string name="searching">Searching…</string>
+    <string name="remove_recent_search">Remove recent search</string>
+    
+    <!-- Location Permission Dialog -->
+    <string name="enable_location_title">Enable Location?</string>
+    <string name="enable_location_message">Allow Murena Maps to access your location to show you where you are on the map and provide a better experience.</string>
+    <string name="allow">Allow</string>
+    <string name="not_now">Not Now</string>
+
+    <!-- Categories of nearby POIs -->
+    <string name="category_food">Food</string>
+    <string name="category_coffee_shop">Coffee</string>
+    <string name="category_health">Healthcare</string>
+    <string name="category_accommodation">Hotels</string>
+    <string name="category_recreation">Recreation</string>
+    <string name="category_transportation">Transportation</string>
+    <string name="category_entertainment">Entertainment</string>
+    <string name="category_nightlife">Nightlife</string>
+    <string name="nearby_categories_title">Categories</string>
+    <string name="filter_nearby_places">Filter nearby places</string>
+    <string name="filter_nearby_places_applied">Nearby place filters applied</string>
+    <string name="reset_filters">Reset</string>
+    <string name="apply_selection">Apply Selection</string>
+    <string name="search_categories_or_keywords">Search categories or keywords...</string>
+    <string name="category_all">All %1$s</string>
+    <string name="category_food_restaurant">Restaurants</string>
+    <string name="category_food_cafe">Cafes</string>
+    <string name="category_food_coffee_shop">Coffee Shops</string>
+    <string name="category_food_bar">Bars</string>
+    <string name="category_food_cocktail">Cocktail</string>
+    <string name="category_food_lounge">Lounge</string>
+    <string name="category_food_restobar">Restobar</string>
+    <string name="category_food_pub">Pubs</string>
+    <string name="category_food_bakery">Bakeries</string>
+    <string name="category_food_ice_cream">Ice Cream</string>
+    <string name="category_food_pizza">Pizza</string>
+    <string name="category_food_chicken">Chicken</string>
+    <string name="category_health_hospital">Hospitals</string>
+    <string name="category_health_medical_centre">Medical Centres</string>
+    <string name="category_health_clinic">Clinics</string>
+    <string name="category_health_doctor">Doctors</string>
+    <string name="category_health_dentist">Dentists</string>
+    <string name="category_health_pharmacy">Pharmacies</string>
+    <string name="category_health_veterinary">Veterinary</string>
+    <string name="category_shopping">Shopping</string>
+    <string name="category_shopping_supermarket">Supermarkets</string>
+    <string name="category_shopping_mall">Malls</string>
+    <string name="category_shopping_convenience">Convenience Stores</string>
+    <string name="category_shopping_clothes">Clothes</string>
+    <string name="category_shopping_electronics">Electronics</string>
+    <string name="category_shopping_books">Books</string>
+    <string name="category_transport_bus_station">Bus Stations</string>
+    <string name="category_transport_train_station">Train Stations</string>
+    <string name="category_transport_subway">Subway</string>
+    <string name="category_transport_taxi">Taxi</string>
+    <string name="category_transport_parking">Parking</string>
+    <string name="category_transport_fuel">Fuel</string>
+    <string name="category_education">Education</string>
+    <string name="category_education_school">Schools</string>
+    <string name="category_education_college">Colleges</string>
+    <string name="category_education_university">Universities</string>
+    <string name="category_education_library">Libraries</string>
+    <string name="category_accommodation_hotel">Hotels</string>
+    <string name="category_accommodation_hostel">Hostels</string>
+    <string name="category_accommodation_guest_house">Guest Houses</string>
+    <string name="category_entertainment_cinema">Cinemas</string>
+    <string name="category_entertainment_theatre">Theatres</string>
+    <string name="category_entertainment_museum">Museums</string>
+    <string name="category_entertainment_zoo">Zoos</string>
+    <string name="category_sports">Sports</string>
+    <string name="category_sports_gym">Gyms</string>
+    <string name="category_sports_stadium">Stadiums</string>
+    <string name="category_sports_swimming_pool">Swimming Pools</string>
+    <string name="category_sports_golf">Golf</string>
+    <string name="category_finance">Finance</string>
+    <string name="category_finance_bank">Banks</string>
+    <string name="category_finance_atm">ATMs</string>
+    <string name="category_government">Government</string>
+    <string name="category_government_police">Police</string>
+    <string name="category_government_post_office">Post Offices</string>
+    <string name="category_government_courthouse">Courthouses</string>
+    <string name="category_services">Services</string>
+    <string name="category_services_laundry">Laundry</string>
+    <string name="category_services_hairdresser">Hairdressers</string>
+    <string name="category_services_car_repair">Car Repair</string>
+    <string name="category_services_car_wash">Car Wash</string>
+    <string name="cannot_paste_a_list_into_itself_or_one_of_its_sublists">Cannot paste a list into itself or one of its sublists</string>
+
+    <string name="opening_hours_open">Open.</string>
+    <string name="opening_hours_closed">Closed.</string>
+    <string name="opening_hours_closes_at">Closes %1$s.</string>
+    <string name="opening_hours_opens_again_at">Opens again %1$s.</string>
+    <string name="opening_hours_opens_at">Opens %1$s.</string>
+    <string name="opening_hours_title">Opening Hours</string>
+    <string name="opening_hours_closed_all_day">Closed</string>
+    <string name="content_description_expand_opening_hours">Expand opening hours</string>
+    <string name="content_description_collapse_opening_hours">Collapse opening hours</string>
+
+    <string name="day_monday">Monday</string>
+    <string name="day_tuesday">Tuesday</string>
+    <string name="day_wednesday">Wednesday</string>
+    <string name="day_thursday">Thursday</string>
+    <string name="day_friday">Friday</string>
+    <string name="day_saturday">Saturday</string>
+    <string name="day_sunday">Sunday</string>
+
+    <string name="day_today">Today</string>
+    <string name="opening_hours_hours">Hours</string>
+    <string name="opening_hours_day">Day</string>
+
+    <string name="search_again">Show additional results</string>
+    <string name="search_again_details">Include results that don\'t exactly match</string>
+</resources>

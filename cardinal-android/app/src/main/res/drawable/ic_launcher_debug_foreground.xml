@@ -1,0 +1,52 @@
+<!--
+  ~ Copyright (C) 2024 MURENA SAS
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  ~
+  -->
+
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <group>
+    <clip-path
+        android:pathData="M0,0h108v108h-108z"/>
+    <path
+        android:pathData="M0,63L108,63L108,93L0,93L0,63Z"
+        android:fillColor="#D9D9D9"/>
+    <path
+        android:pathData="M0,63L108,63L108,93L0,93L0,63Z">
+      <aapt:attr name="android:fillColor">
+        <gradient 
+            android:startX="54"
+            android:startY="68.54"
+            android:endX="54"
+            android:endY="94.65"
+            android:type="linear">
+          <item android:offset="0" android:color="#FFFF3434"/>
+          <item android:offset="1" android:color="#FFFF0953"/>
+        </gradient>
+      </aapt:attr>
+    </path>
+    <path
+        android:pathData="M0,63L108,63L108,93L0,93L0,63Z"
+        android:fillColor="#485363"/>
+    <path
+        android:pathData="M32.61,83L29.69,83L29.71,80.85L32.61,80.85C33.34,80.85 33.95,80.68 34.45,80.36C34.94,80.03 35.32,79.54 35.57,78.91C35.83,78.28 35.96,77.51 35.96,76.62L35.96,75.96C35.96,75.28 35.88,74.67 35.73,74.15C35.59,73.63 35.38,73.19 35.1,72.83C34.82,72.48 34.47,72.21 34.06,72.03C33.65,71.85 33.17,71.76 32.64,71.76L29.64,71.76L29.64,69.59L32.64,69.59C33.54,69.59 34.36,69.74 35.1,70.05C35.85,70.35 36.5,70.79 37.04,71.35C37.59,71.91 38.01,72.59 38.3,73.38C38.61,74.16 38.76,75.02 38.76,75.98L38.76,76.62C38.76,77.57 38.61,78.44 38.3,79.22C38.01,80.01 37.59,80.69 37.04,81.25C36.5,81.81 35.85,82.24 35.1,82.55C34.35,82.85 33.52,83 32.61,83ZM31.26,69.59L31.26,83L28.5,83L28.5,69.59L31.26,69.59ZM49.76,80.85L49.76,83L42.62,83L42.62,80.85L49.76,80.85ZM43.53,69.59L43.53,83L40.76,83L40.76,69.59L43.53,69.59ZM48.83,75.05L48.83,77.15L42.62,77.15L42.62,75.05L48.83,75.05ZM49.75,69.59L49.75,71.76L42.62,71.76L42.62,69.59L49.75,69.59ZM52.63,69.59L54.97,69.59L58.42,79.44L61.86,69.59L64.2,69.59L59.36,83L57.48,83L52.63,69.59ZM51.37,69.59L53.7,69.59L54.13,79.19L54.13,83L51.37,83L51.37,69.59ZM63.13,69.59L65.47,69.59L65.47,83L62.71,83L62.71,79.19L63.13,69.59ZM78.91,75.98L78.91,76.62C78.91,77.64 78.77,78.55 78.49,79.36C78.22,80.17 77.83,80.86 77.32,81.43C76.82,82 76.22,82.43 75.52,82.73C74.83,83.03 74.06,83.18 73.21,83.18C72.37,83.18 71.6,83.03 70.9,82.73C70.2,82.43 69.6,82 69.09,81.43C68.58,80.86 68.19,80.17 67.9,79.36C67.63,78.55 67.49,77.64 67.49,76.62L67.49,75.98C67.49,74.96 67.63,74.04 67.9,73.24C68.18,72.43 68.57,71.74 69.07,71.17C69.58,70.59 70.18,70.16 70.88,69.86C71.58,69.56 72.35,69.41 73.19,69.41C74.04,69.41 74.81,69.56 75.5,69.86C76.2,70.16 76.8,70.59 77.31,71.17C77.82,71.74 78.21,72.43 78.49,73.24C78.77,74.04 78.91,74.96 78.91,75.98ZM76.12,76.62L76.12,75.96C76.12,75.25 76.05,74.63 75.93,74.09C75.8,73.54 75.61,73.09 75.35,72.72C75.1,72.35 74.8,72.08 74.43,71.89C74.07,71.7 73.66,71.61 73.19,71.61C72.72,71.61 72.31,71.7 71.95,71.89C71.59,72.08 71.29,72.35 71.03,72.72C70.79,73.09 70.6,73.54 70.47,74.09C70.34,74.63 70.28,75.25 70.28,75.96L70.28,76.62C70.28,77.32 70.34,77.95 70.47,78.5C70.6,79.04 70.79,79.49 71.04,79.87C71.3,80.24 71.6,80.52 71.96,80.71C72.33,80.9 72.74,80.99 73.21,80.99C73.67,80.99 74.09,80.9 74.45,80.71C74.81,80.52 75.12,80.24 75.36,79.87C75.61,79.49 75.8,79.04 75.93,78.5C76.05,77.95 76.12,77.32 76.12,76.62Z"
+        android:fillColor="#ffffff"/>
+  </group>
+</vector>

@@ -49,3 +49,15 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - The final push was rejected as non-fast-forward because this project log was updated on `main` while the import workflow was still running. This was a repository bookkeeping race, not a Murena source/build failure.
 - No Murena source from that runner commit reached `main`.
 - Fix for the next bootstrap: base the generated import commit on the latest `origin/main` immediately before committing/pushing, and do not make parallel repository writes during the import.
+
+## 2026-09-03 — clean upstream snapshot imported
+
+- Official upstream: `https://gitlab.e.foundation/e/os/maps`
+- Upstream branch: `main`
+- Exact upstream commit: `f9a061aff58ec7f11dc7fa19bd0138720fc99b01`
+- Upstream commit date: `2026-09-03T15:21:13Z`
+- Upstream commit subject: `Translated using Weblate (Portuguese (Brazil))`
+- Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream `.git` directory is intentionally not copied.
+- Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.
+- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.
+- Next gate: inspect the upstream build instructions and compile a stock debug APK before any product feature changes.

@@ -1,0 +1,81 @@
+<!--
+  ~     Cardinal Maps
+  ~     Copyright (C) 2026 Cardinal Maps Authors
+  ~
+  ~     This program is free software: you can redistribute it and/or modify
+  ~     it under the terms of the GNU General Public License as published by
+  ~     the Free Software Foundation, either version 3 of the License, or
+  ~     (at your option) any later version.
+  ~
+  ~     This program is distributed in the hope that it will be useful,
+  ~     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~     GNU General Public License for more details.
+  ~
+  ~     You should have received a copy of the GNU General Public License
+  ~     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background_alpha"
+        android:strokeWidth="1"
+        android:pathData="
+            M20,10
+            a10,10 0 1,1 0,20
+            a10,10 0 1,1 0,-20" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background_alpha"
+        android:strokeWidth="1"
+        android:pathData="
+            M20,12
+            a8,8 0 1,1 0,16
+            a8,8 0 1,1 0,-16" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="
+        M20,29
+        A9,9 0 0,0 29,20
+        A9,9 0 0,0 20,11
+        A9,9 0 0,0 11,20
+        A9,9 0 0,0 16,28" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M20,30 L20,35" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="
+            M12,35
+            L10,30
+
+            M12,35
+            L17,34" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/direction_icon_background"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M16,28 L12,35" />
+
+</vector>

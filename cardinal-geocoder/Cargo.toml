@@ -1,0 +1,29 @@
+[package]
+name = "cardinal-geocoder"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "bin/uniffi-bindgen.rs"
+
+[dependencies]
+levenshtein_automata = { workspace = true }
+s2 = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+deunicode = { workspace = true }
+lazy_static = { workspace = true }
+regex = { workspace = true }
+geo = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+mvt-reader = { workspace = true }
+tantivy = { workspace = true }
+uniffi = { workspace = true, features = ["cli"] }
+
+[build-dependencies]
+uniffi = { workspace = true, features = ["build"] }

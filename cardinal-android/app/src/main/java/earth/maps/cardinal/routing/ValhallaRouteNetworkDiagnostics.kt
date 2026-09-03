@@ -1,0 +1,57 @@
+/*
+ *     Cardinal Maps
+ *     Copyright (C) 2026 Cardinal Maps Authors
+ *
+ *     This program is free software: you can redistribute it and/or modify
+ *     it under the terms of the GNU General Public License as published by
+ *     the Free Software Foundation, either version 3 of the License, or
+ *     (at your option) any later version.
+ *
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ *     You should have received a copy of the GNU General Public License
+ *     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package earth.maps.cardinal.routing
+
+import android.util.Log
+import earth.maps.cardinal.BuildConfig
+import earth.maps.cardinal.data.maskApiKeyQueryParamsForLogs
+
+private const val TAG = "ValhallaRouting"
+private const val KTOR_CLIENT_TAG = "KtorClient"
+
+internal class ValhallaRouteNetworkDiagnostics(
+    val isEnabled: Boolean = BuildConfig.DEBUG,
+    private val log: (tag: String, message: String) -> Unit = { tag, message ->
+        Log.d(tag, message)
+    }
+) {
+    fun logKtorMessage(message: String) {
+        if (!isEnabled) {
+            return
+        }
+
+        log(KTOR_CLIENT_TAG, message.maskApiKeyQueryParamsForLogs())
+    }
+
+    fun logRouteRequest(
+        endpoint: String,
+        config: () -> String,
+        requestBody: () -> String
+    ) {
+        if (!isEnabled) {
+            return
+        }
+
+        log(TAG, "Calling Valhalla route endpoint=$endpoint, ${config()}")
+        log(
+            KTOR_CLIENT_TAG,
+            "REQUEST SUMMARY: ${ValhallaRequestLogRedactor.summarize(requestBody())}"
+        )
+    }
+}

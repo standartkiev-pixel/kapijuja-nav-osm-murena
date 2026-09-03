@@ -1,0 +1,251 @@
+/*
+ *     Cardinal Maps
+ *     Copyright (C) 2025 Cardinal Maps Authors
+ *
+ *     This program is free software: you can redistribute it and/or modify
+ *     it under the terms of the GNU General Public License as published by
+ *     the Free Software Foundation, either version 3 of the License, or
+ *     (at your option) any later version.
+ *
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *     GNU General Public License for more details.
+ *
+ *     You should have received a copy of the GNU General Public License
+ *     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package earth.maps.cardinal.routing
+
+import com.google.gson.FieldNamingPolicy
+import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
+
+/**
+ * Base class for routing options that can be serialized to JSON for Valhalla API.
+ */
+abstract class RoutingOptions {
+    abstract val costingType: String
+
+    /**
+     * Convert this options object to JSON string for Valhalla API.
+     */
+    @Suppress("unused")
+    fun toValhallaOptionsJson(
+        costingProfileOverride: ValhallaCostingProfile =
+            ValhallaCostingProfile.fromRouteProviderProfile(costingType),
+        departNow: Boolean = false
+    ): String {
+        val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+        val options = gson.toJsonTree(this@RoutingOptions).asJsonObject.apply {
+            remove("costing_type")
+        }
+        val wrapper = object {
+            val alternates = 5
+            val costingOptions = mapOf(
+                costingProfileOverride.costingOptionsKey to options
+            )
+            val date_time = if (departNow) {
+                mapOf("type" to 0)
+            } else {
+                null
+            }
+        }
+        return gson.toJson(wrapper)
+    }
+}
+
+/**
+ * Interface for routing options that include automobile-specific parameters.
+ */
+interface AutoOptions {
+    val maneuverPenalty: Double?
+    val gateCost: Double?
+    val privateAccessPenalty: Double?
+    val tollBoothCost: Double?
+    val useHighways: Double?
+    val useTolls: Double?
+    val useLivingStreets: Double?
+    val useTracks: Double?
+    val excludeUnpaved: Boolean?
+    val excludeCashOnlyTolls: Boolean?
+    val ignoreClosures: Boolean?
+    val ignoreRestrictions: Boolean?
+    val ignoreOneWays: Boolean?
+    val ignoreAccess: Boolean?
+}
+
+/**
+ * Routing options for automobile mode.
+ */
+data class AutoRoutingOptions(
+    override val costingType: String = COSTING_TYPE_AUTO,
+
+    // Maneuver and access penalties
+    override val maneuverPenalty: Double? = null,
+    override val gateCost: Double? = null,
+    override val tollBoothCost: Double? = null,
+    override val privateAccessPenalty: Double? = null,
+
+    // Road type preferences (0-1 range)
+    override val useHighways: Double? = null,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = null,
+    override val useTracks: Double? = null,
+
+    // Restriction options
+    override val ignoreClosures: Boolean? = null,
+    override val ignoreRestrictions: Boolean? = null,
+    override val ignoreOneWays: Boolean? = null,
+    override val ignoreAccess: Boolean? = null,
+
+    // HOV options
+    override val excludeUnpaved: Boolean? = null,
+    override val excludeCashOnlyTolls: Boolean? = null
+) : RoutingOptions(), AutoOptions {
+
+    companion object {
+        const val COSTING_TYPE_AUTO = "auto"
+        const val DEFAULT_MANEUVER_PENALTY = 25.0
+        const val DEFAULT_GATE_COST = 45.0
+        const val DEFAULT_TOLL_BOOTH_COST = 30.0
+    }
+}
+
+/**
+ * Routing options for truck mode (extends auto with truck-specific parameters).
+ */
+data class TruckRoutingOptions(
+    override val costingType: String = COSTING_TYPE_TRUCK,
+
+    // Basic auto options
+    override val maneuverPenalty: Double? = null,
+    override val gateCost: Double? = DEFAULT_GATE_COST,
+    override val tollBoothCost: Double? = DEFAULT_TOLL_BOOTH_COST,
+    override val privateAccessPenalty: Double? = null,
+    override val useHighways: Double? = null,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = null,
+    override val useTracks: Double? = null,
+    override val ignoreClosures: Boolean? = null,
+    override val ignoreRestrictions: Boolean? = null,
+    override val ignoreOneWays: Boolean? = null,
+    override val ignoreAccess: Boolean? = null,
+    override val excludeUnpaved: Boolean? = null,
+    override val excludeCashOnlyTolls: Boolean? = null,
+
+    // Truck-specific options
+    val length: Double? = null, // meters
+    val width: Double? = null,
+    val height: Double? = null,
+    val weight: Double? = null, // metric tons
+    val axleCount: Int? = null,
+    val hazmat: Boolean? = null,
+    val useTruckRoute: Double? = null // 0-1 range
+) : RoutingOptions(), AutoOptions {
+
+    companion object {
+        const val COSTING_TYPE_TRUCK = "truck"
+        const val DEFAULT_GATE_COST = 45.0
+        const val DEFAULT_TOLL_BOOTH_COST = 30.0
+    }
+}
+
+/**
+ * Routing options for motor scooter mode.
+ */
+data class MotorScooterRoutingOptions(
+    override val costingType: String = "motor_scooter",
+
+    // Basic auto options
+    override val maneuverPenalty: Double? = null,
+    override val gateCost: Double? = null,
+    override val tollBoothCost: Double? = null,
+    override val privateAccessPenalty: Double? = null,
+    override val useHighways: Double? = null,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = null,
+    override val useTracks: Double? = null,
+    override val ignoreClosures: Boolean? = null,
+    override val ignoreRestrictions: Boolean? = null,
+    override val ignoreOneWays: Boolean? = null,
+    override val ignoreAccess: Boolean? = null,
+    override val excludeUnpaved: Boolean? = null,
+    override val excludeCashOnlyTolls: Boolean? = null,
+
+    // Motor scooter specific
+    val usePrimary: Double? = null,
+    val useHills: Double? = null
+) : RoutingOptions(), AutoOptions
+
+/**
+ * Routing options for motorcycle mode.
+ */
+data class MotorcycleRoutingOptions(
+    override val costingType: String = "motorcycle",
+
+    // Basic auto options
+    override val maneuverPenalty: Double? = null,
+    override val gateCost: Double? = null,
+    override val tollBoothCost: Double? = null,
+    override val privateAccessPenalty: Double? = null,
+    override val useHighways: Double? = null,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = null,
+    override val useTracks: Double? = null,
+    override val ignoreClosures: Boolean? = null,
+    override val ignoreRestrictions: Boolean? = null,
+    override val ignoreOneWays: Boolean? = null,
+    override val ignoreAccess: Boolean? = null,
+    override val excludeUnpaved: Boolean? = null,
+    override val excludeCashOnlyTolls: Boolean? = null,
+
+    // Motorcycle specific
+    val useTrails: Double? = null
+) : RoutingOptions(), AutoOptions
+
+/**
+ * Routing options for cycling mode.
+ */
+data class CyclingRoutingOptions(
+    override val costingType: String = "bicycle",
+
+    // Bicycle type
+    @SerializedName("bicycle_type")
+    val bicycleType: BicycleType? = null,
+
+    // Speed and fitness
+    val cyclingSpeed: Double? = null, // km/h
+
+    // Road preferences (0-1 range)
+    val useRoads: Double? = null,
+    val useHills: Double? = null,
+
+    // Surface preferences
+    val avoidBadSurfaces: Double? = null
+) : RoutingOptions()
+
+/**
+ * Routing options for pedestrian mode.
+ */
+data class PedestrianRoutingOptions(
+    override val costingType: String = "pedestrian",
+
+    val walkingSpeed: Double? = WALKING_SPEED_IN_KMH, // km/h
+
+    // Path preferences (factors)
+    val walkwayFactor: Double? = null,
+    val sidewalkFactor: Double? = null,
+
+    // Road preferences (0-1 range)
+    val useLit: Double? = null,
+
+    // Accessibility options
+    val type: PedestrianType? = null
+) : RoutingOptions() {
+    companion object {
+        const val WALKING_SPEED_IN_KMH = 4.2
+    }
+}

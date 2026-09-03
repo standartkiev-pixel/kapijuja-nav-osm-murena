@@ -1,0 +1,272 @@
+# GitLab CI/CD configuration for Cardinal Android
+
+variables:
+  # Enable Git submodules
+  GIT_SUBMODULE_STRATEGY: recursive
+  # Enable Git LFS
+  GIT_LFS_SKIP_SMUDGE: "0"
+  # Gradle configuration
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+
+# Define pipeline stages
+stages:
+  - lint
+  - test
+  - build
+  - ai-review
+  - release
+
+include:
+  - project: "e/templates"
+    ref: main
+    file: "/.gitlab/gitlab-ci/gitlab-ci-check-mr-description.yml"
+  - project: "e/os/ai-review"
+    ref: main
+    file: "/.gitlab-ci.yml"
+
+.android-rust-job:
+  tags:
+    - build07
+  image: cimg/android:2026.07.1-ndk
+  variables:
+    ANDROID_HOME: /home/circleci/android-sdk
+    ANDROID_NDK_VERSION: "29.0.14206865"
+    ANDROID_CMAKE_VERSION: "3.22.1"
+    ANDROID_SDK_ROOT: /home/circleci/android-sdk
+  before_script:
+    - sudo apt-get update -qq
+    - sudo apt-get install -y -qq git-lfs curl unzip protobuf-compiler
+    - git lfs install --skip-repo
+    - |
+      if [ ! -d "$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" ]; then
+        echo "Installing NDK $ANDROID_NDK_VERSION..."
+        yes | sdkmanager "ndk;$ANDROID_NDK_VERSION" || true
+      fi
+    - |
+      if [ ! -d "$ANDROID_HOME/cmake/$ANDROID_CMAKE_VERSION" ]; then
+        echo "Installing CMake $ANDROID_CMAKE_VERSION..."
+        yes | sdkmanager "cmake;$ANDROID_CMAKE_VERSION" || true
+      fi
+    - export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION
+    - export ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION
+    - export NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION
+    - |
+      if ! command -v rustc &> /dev/null; then
+        echo "Installing Rust..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+        source $HOME/.cargo/env
+      fi
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - rustup target add aarch64-linux-android
+    - rustup target add x86_64-linux-android
+    - cargo install cargo-ndk || true
+  cache:
+    - key:
+        files:
+          - cardinal-android/**/*.gradle*
+          - cardinal-android/gradle/wrapper/gradle-wrapper.properties
+        prefix: gradle-${CI_JOB_NAME}
+      paths:
+        - .gradle/caches
+        - .gradle/wrapper
+        - cardinal-android/.gradle
+      policy: pull-push
+    - key:
+        files:
+          - Cargo.lock
+        prefix: cargo-${CI_JOB_NAME}
+      paths:
+        - .cargo/registry
+        - .cargo/git
+        - ./target
+      policy: pull-push
+
+# Detekt static analysis job
+detekt:
+  tags:
+    - build07
+  stage: lint
+  image: cimg/android:2026.07.1-ndk
+  # Run on pushes to main, release refs, and merge requests to main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    - if: '$CI_COMMIT_BRANCH =~ /^release(\/.*)?$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  # Allow newer pipelines to cancel older ones
+  interruptible: true
+  # Resource group for concurrency control
+  resource_group: android-detekt-${CI_COMMIT_REF_SLUG}
+  variables:
+    ANDROID_HOME: /home/circleci/android-sdk
+    ANDROID_SDK_ROOT: /home/circleci/android-sdk
+  # Cache Gradle dependencies
+  cache:
+    key:
+      files:
+        - cardinal-android/**/*.gradle*
+        - cardinal-android/gradle/wrapper/gradle-wrapper.properties
+      prefix: ${CI_JOB_NAME}
+    paths:
+      - .gradle/caches
+      - .gradle/wrapper
+      - cardinal-android/.gradle
+    policy: pull-push
+  before_script:
+    - sudo apt-get update -qq
+    - sudo apt-get install -y -qq git-lfs
+    - git lfs install --skip-repo
+
+  script:
+    # Configure Gradle for CI
+    - mkdir -p ~/.gradle
+    - echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+    # Run detekt
+    - cd cardinal-android
+    - echo "sdk.dir=${ANDROID_HOME}" > local.properties
+    - ./gradlew :app:hideSecret -Pkey=$STADIA_KEY -Ppackage=earth.maps.cardinal -PkeyName=StadiaKey --no-daemon
+    - ./gradlew detekt
+  # Optional: Upload detekt reports as artifacts
+  artifacts:
+    when: always
+    reports:
+      codequality: cardinal-android/app/build/reports/detekt/detekt.xml
+    paths:
+      - cardinal-android/app/build/reports/detekt/
+    expire_in: 1 week
+
+# Android debug APK build job with Rust support
+build:
+  extends: .android-rust-job
+  stage: build
+  needs:
+    - tests
+  # Run on pushes to main and merge requests to main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  # Allow newer pipelines to cancel older ones
+  interruptible: true
+  # Resource group for concurrency control
+  resource_group: android-build-${CI_COMMIT_REF_SLUG}
+  script:
+    # Configure Gradle for CI
+    - mkdir -p ~/.gradle
+    - echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+    # Build debug APKs for each architecture
+    - cd cardinal-android
+    - echo "sdk.dir=${ANDROID_HOME}" > local.properties
+    - ./gradlew :app:hideSecret -Pkey=$STADIA_KEY -Ppackage=earth.maps.cardinal -PkeyName=StadiaKey --no-daemon
+    - ./gradlew generateUniFFIBindings
+    - ./gradlew assembleArm64Debug --info --stacktrace --no-daemon
+  artifacts:
+    when: always
+    paths:
+      - cardinal-android/app/build/outputs/apk/arm64/debug/
+    expire_in: 7 days
+
+tests:
+  extends: .android-rust-job
+  stage: test
+  interruptible: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    - if: '$CI_COMMIT_BRANCH =~ /^release(\/.*)?$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+  resource_group: android-coverage-${CI_COMMIT_REF_SLUG}
+  script:
+    - cd cardinal-android
+    - echo "sdk.dir=${ANDROID_HOME}" > local.properties
+    - ./gradlew :app:hideSecret -Pkey=$STADIA_KEY -Ppackage=earth.maps.cardinal -PkeyName=StadiaKey --no-daemon
+    - ./gradlew app:jacocoArm64DebugUnitReport --info --stacktrace --no-daemon
+    - python3 scripts/print_instruction_coverage.py app/build/reports/jacoco/jacocoArm64DebugUnitReport/jacocoArm64DebugUnitReport.xml
+  coverage: "/Total.*?([0-9]{1,3})%/"
+  artifacts:
+    when: always
+    paths:
+      - cardinal-android/app/build/test-results/**/*.xml
+      - cardinal-android/app/build/reports/jacoco/jacocoArm64DebugUnitReport/
+    reports:
+      junit: cardinal-android/app/build/test-results/**/*.xml
+      coverage_report:
+        coverage_format: jacoco
+        path: cardinal-android/app/build/reports/jacoco/jacocoArm64DebugUnitReport/jacocoArm64DebugUnitReport.xml
+
+# Android build_release job - builds signed APKs and AABs for release
+build_release:
+  extends: .android-rust-job
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+  # Resource group for concurrency control
+  resource_group: android-release-${CI_COMMIT_REF_SLUG}
+  script:
+    # Extract version from tag
+    - export TAG=$CI_COMMIT_TAG
+    - export VERSION_NAME=${TAG#v}
+    - export VERSION_CODE=$(date +%s)
+    - echo "Extracted version=$VERSION_NAME from tag=$TAG"
+    - echo "VERSION_CODE=$VERSION_CODE"
+    # Set up keystore from CI/CD variable
+    - export KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD}"
+    - export KEYSTORE_ALIAS="${KEYSTORE_ALIAS}"
+    - echo "${KEYSTORE}" | base64 --decode > cardinal-android/app/release.keystore
+    - ls -l cardinal-android/app/release.keystore
+    # Configure Gradle for CI
+    - mkdir -p ~/.gradle
+    - echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.parallel=true" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.configureondemand=true" >> ~/.gradle/gradle.properties
+    - echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError" >> ~/.gradle/gradle.properties
+    # Build release APKs and AABs for each architecture
+    - cd cardinal-android
+    - echo "sdk.dir=${ANDROID_HOME}" > local.properties
+    # Build APKs for each architecture
+    - ./gradlew :app:hideSecret -Pkey=$STADIA_KEY -Ppackage=earth.maps.cardinal -PkeyName=StadiaKey --no-daemon
+    - ./gradlew generateUniFFIBindings
+    - ./gradlew assembleArm64Release --info --stacktrace --no-daemon
+    - ./gradlew assembleX86_64Release --info --stacktrace --no-daemon
+  artifacts:
+    expire_in: never
+    paths:
+      - cardinal-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk
+      - cardinal-android/app/build/outputs/apk/x86_64/release/app-x86_64-release.apk
+
+create_release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+  needs:
+    - job: build_release
+      artifacts: true
+  script:
+    - echo "Creating release for $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: $CI_COMMIT_TAG
+    description: |
+      ## Murena Maps ${CI_COMMIT_TAG}
+      
+      This release includes separate builds for different architectures:
+      
+      ### APK Files (for sideloading)
+      - `com.murena.maps-arm64-${CI_COMMIT_TAG}.apk` - For ARM64 devices (most modern Android phones)
+      - `com.murena.maps-x86_64-${CI_COMMIT_TAG}.apk` - For x86_64 devices (emulators, some tablets)
+      
+      Choose the appropriate file for your device architecture. If unsure, try the ARM64 version first as it works on most modern Android devices.
+    assets:
+      links:
+        - name: 'com.murena.maps-arm64-${CI_COMMIT_TAG}.apk'
+          url: "https://gitlab.e.foundation/api/v4/projects/$CI_PROJECT_ID/jobs/artifacts/${CI_COMMIT_TAG}/raw/cardinal-android/app/build/outputs/apk/arm64/release/app-arm64-release.apk?job=build_release"
+          link_type: 'package'
+        - name: 'com.murena.maps-x86_64-${CI_COMMIT_TAG}.apk'
+          url: "https://gitlab.e.foundation/api/v4/projects/$CI_PROJECT_ID/jobs/artifacts/${CI_COMMIT_TAG}/raw/cardinal-android/app/build/outputs/apk/x86_64/release/app-x86_64-release.apk?job=build_release"
+          link_type: 'package'
