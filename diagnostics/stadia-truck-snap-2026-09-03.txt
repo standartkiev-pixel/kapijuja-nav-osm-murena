@@ -4,21 +4,21 @@ HTTP 400
 
 === radius_25 ===
 HTTP 400
-{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+{"code":"NoRoute","message":"Impossible route between points"}
 
 === radius_50 ===
 HTTP 400
-{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+{"code":"NoRoute","message":"Impossible route between points"}
 
 === radius_100 ===
-HTTP 400
-{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+HTTP 200
+{"code":"Ok","route":{"weight_name":"truck","distance":26532.699,"duration":1729.163},"waypoints":[{"distance":3.796,"name":"","location":[16.765814,52.441574]},{"distance":57.050,"name":"Jędrzejowska","location":[16.942872,52.355530]}]}
 
 === radius_150 ===
-HTTP 400
-{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+HTTP 200
+{"code":"Ok","route":{"weight_name":"truck","distance":26532.699,"duration":1729.163},"waypoints":[{"distance":3.796,"name":"","location":[16.765814,52.441574]},{"distance":57.050,"name":"Jędrzejowska","location":[16.942872,52.355530]}]}
 
 === radius_200 ===
-HTTP 400
-{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+HTTP 200
+{"code":"Ok","route":{"weight_name":"truck","distance":26532.699,"duration":1729.163},"waypoints":[{"distance":3.796,"name":"","location":[16.765814,52.441574]},{"distance":57.050,"name":"Jędrzejowska","location":[16.942872,52.355530]}]}
 
