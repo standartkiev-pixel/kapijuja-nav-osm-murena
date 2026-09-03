@@ -49,11 +49,11 @@ jobs:
           }
 
           probe radius_0 ''
-          probe radius_25 ',\"radius\":25'
-          probe radius_50 ',\"radius\":50'
-          probe radius_100 ',\"radius\":100'
-          probe radius_150 ',\"radius\":150'
-          probe radius_200 ',\"radius\":200'
+          probe radius_25 ',"radius":25'
+          probe radius_50 ',"radius":50'
+          probe radius_100 ',"radius":100'
+          probe radius_150 ',"radius":150'
+          probe radius_200 ',"radius":200'
 
           cat "$OUT"
 
