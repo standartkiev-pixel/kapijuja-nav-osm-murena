@@ -1,0 +1,24 @@
+=== radius_0 ===
+HTTP 400
+{"code":"NoRoute","message":"Impossible route between points"}
+
+=== radius_25 ===
+HTTP 400
+{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+
+=== radius_50 ===
+HTTP 400
+{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+
+=== radius_100 ===
+HTTP 400
+{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+
+=== radius_150 ===
+HTTP 400
+{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+
+=== radius_200 ===
+HTTP 400
+{"error":{"reason":"key must be a string at line 1 column 84"},"status":400}
+
