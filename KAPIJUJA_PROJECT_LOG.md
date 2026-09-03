@@ -71,4 +71,13 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - Upstream's own CI builds ARM64 debug by installing Rust + Cargo NDK + Android NDK 29.0.14206865 + CMake 3.22.1, running the upstream `hideSecret` task, generating UniFFI bindings, then `assembleArm64Debug`.
 - Upstream itself uses Stadia endpoints for its standard Pelias geocoder and Valhalla router. Therefore the repository secret `STADIA_API_KEY` will be passed to the unmodified upstream `hideSecret` task only to reproduce normal Murena functionality. This is **not** the postponed custom BUS/Stadia integration.
 - No secret value is committed to the repository or printed intentionally.
-- Next experiment: reproduce the upstream ARM64 debug build in GitHub Actions without changing application source code.
+
+## 2026-09-03 — baseline build experiment 1: GitHub SDK image too old
+
+- GitHub Actions run: `33773704410`; job: `100710040047`.
+- Checkout including Git LFS succeeded; Java 17 setup succeeded.
+- Failure occurred before Rust, secret generation, Gradle configuration or application compilation.
+- Exact failure: the generic GitHub Ubuntu Android command-line tools could not find `platforms;android-37` (`Warning: Failed to find package 'platforms;android-37'`).
+- This is an Android SDK runner-environment mismatch, not a Murena source-code failure.
+- Upstream Murena avoids this mismatch by building inside `cimg/android:2026.07.1-ndk`.
+- Next experiment: run our baseline job inside the same `cimg/android:2026.07.1-ndk` container and follow the upstream GitLab build steps directly instead of reconstructing the SDK environment manually.
