@@ -1,13 +1,13 @@
 # Kapijuja Nav critical pass — 2026-09-03
 
-This pass deliberately groups only changes needed for immediate vehicle-routing and offline-country testing.
+This pass deliberately groups changes needed for immediate vehicle-routing, live-traffic and offline-country testing.
 
 Planned changes:
 
 1. Routing profile selection
    - If saved profiles exist for the selected routing mode, hide the synthetic Default Profile choice.
    - If no saved profile exists, silently use built-in defaults.
-   - Persist the last selected saved profile as the default for its mode.
+   - Remember the last selected saved profile for each routing mode and reload it next time.
    - Preserve support for multiple saved profiles per mode.
 
 2. Routing mode selector UX
@@ -24,6 +24,7 @@ Planned changes:
    - Do not globally enable ignore_access.
    - Add a distinct last-mile fallback for a destination that strict commercial routing cannot reach.
    - Preserve dimensional/weight restrictions while softening only HGV/access restrictions for the fallback segment.
+   - For Truck, prefer Valhalla hgv_no_access_penalty rather than disabling restrictions globally.
    - Expose the fallback segment distinctly so UI can render it dashed and warn the driver that access must be verified.
 
 5. Offline country downloads
@@ -41,8 +42,17 @@ Planned changes:
    - Keep package/application id stable.
    - Verify versionCode progression and signing identity in the build pipeline so APK can update an installed Kapijuja build instead of requiring uninstall.
 
+8. Live traffic and road closures
+   - Use Stadia/Valhalla traffic-influenced routing online when the configured key/account supports it.
+   - Current hosted API supports traffic variants for auto, bus and truck using _traffic / _traffic_premium profiles.
+   - Keep vehicle costing options paired with the matching traffic profile so Truck dimensions/access rules are not lost.
+   - Tourist-coach Car mode uses auto traffic semantics with coach dimensions; native Bus mode uses bus traffic semantics.
+   - Send depart-now date_time for current traffic and time-dependent restrictions.
+   - Preserve automatic fallback to the corresponding non-traffic profile on unsupported/invalid traffic requests.
+   - Keep live closures respected by default; never enable ignore_closures unless explicitly requested.
+   - Continue displaying per-segment congestion from Ferrostar/Valhalla annotations when present.
+
 Deferred from this pass:
-- national live-closure/NAP adapters;
-- live traffic ingestion for truck/bus;
+- country-specific external closure/NAP adapters beyond the hosted Valhalla traffic/closure feed;
 - compressed Valhalla tile-extract packaging;
 - detailed country polygons and continent expansion beyond Europe.
