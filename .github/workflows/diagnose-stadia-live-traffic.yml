@@ -26,6 +26,7 @@ jobs:
             local costing="$2"
             local options_key="$3"
             local options="$4"
+            local locations="$5"
             local body
             body="$(mktemp)"
             local request
@@ -33,11 +34,9 @@ jobs:
               --arg costing "$costing" \
               --arg optionsKey "$options_key" \
               --argjson options "$options" \
+              --argjson locations "$locations" \
               '{
-                locations:[
-                  {lat:52.44156712,lon:16.7658691},
-                  {lat:52.355681,lon:16.94207}
-                ],
+                locations:$locations,
                 costing:$costing,
                 costing_options:{($optionsKey):$options},
                 date_time:{type:0},
@@ -69,6 +68,10 @@ jobs:
           TRUCK='{"height":4.0,"width":2.5,"length":16.5,"weight":45.0,"axle_count":3,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300,"service_factor":5.0,"low_class_penalty":300,"use_truck_route":1.0,"ignore_closures":false,"closure_factor":10.0}'
           BUS='{"height":4.0,"width":2.5,"length":13.5,"weight":18.0,"use_highways":0.8,"use_living_streets":0.0,"use_tracks":0.0,"service_penalty":300,"service_factor":5.0,"alley_factor":10.0,"ignore_closures":false,"closure_factor":10.0}'
 
-          probe tourist_coach_auto_traffic_premium auto_traffic_premium auto "$AUTO"
-          probe truck_traffic_premium truck_traffic_premium truck "$TRUCK"
-          probe line_bus_traffic_premium bus_traffic_premium bus "$BUS"
+          USER_ROUTE='[{"lat":52.44156712,"lon":16.7658691},{"lat":52.355681,"lon":16.94207}]'
+          TRUCK_HIGHWAY='[{"lat":52.350374,"lon":16.788772,"radius":100},{"lat":52.350287,"lon":16.829985,"radius":100}]'
+
+          probe tourist_coach_auto_traffic_premium auto_traffic_premium auto "$AUTO" "$USER_ROUTE"
+          probe truck_traffic_premium_user_route truck_traffic_premium truck "$TRUCK" "$USER_ROUTE"
+          probe truck_traffic_premium_highway truck_traffic_premium truck "$TRUCK" "$TRUCK_HIGHWAY"
+          probe line_bus_traffic_premium bus_traffic_premium bus "$BUS" "$USER_ROUTE"
