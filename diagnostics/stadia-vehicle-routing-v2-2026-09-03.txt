@@ -1,0 +1,24 @@
+=== bus_full_int ===
+HTTP 200
+{"code":"Ok","route":{"weight_name":"bus","distance":35307.672,"duration":1631.070},"trip":null}
+
+=== auto_coach_dims ===
+HTTP 200
+{"code":"Ok","route":{"weight_name":"auto","distance":35307.672,"duration":1631.070},"trip":null}
+
+=== truck_user_int ===
+HTTP 400
+{"code":"NoRoute","message":"Impossible route between points"}
+
+=== truck_start_to_highway ===
+HTTP 200
+{"code":"Ok","route":{"weight_name":"truck","distance":18260.711,"duration":946.997},"trip":null}
+
+=== truck_highway_to_dest ===
+HTTP 400
+{"code":"NoRoute","message":"Impossible route between points"}
+
+=== truck_highway_only ===
+HTTP 200
+{"code":"Ok","route":{"weight_name":"truck","distance":2803.000,"duration":126.156},"trip":null}
+
