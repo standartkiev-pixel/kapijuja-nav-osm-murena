@@ -504,6 +504,16 @@ private fun BusOptionsEditor(
         }
     }
 
+    OptionsSection("Bus Axles") {
+        SliderOption(
+            "Axle Count",
+            options.axleCount?.toDouble(),
+            2f..8f,
+            valueFormatter = { it.format(0) }) { value ->
+            onOptionsChanged(options.copy(axleCount = value?.toInt()))
+        }
+    }
+
     OptionsSection("Bus Type") {
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -46,6 +46,9 @@ abstract class RoutingOptions {
             // App-only selector: it chooses coach (auto access) vs line bus (bus access).
             // It is not a Valhalla costing option and must never be sent to the API.
             remove("line_bus")
+            if (this@RoutingOptions is BusRoutingOptions) {
+                remove("axle_count")
+            }
 
             // Stadia's current hosted Valhalla request schema requires these time costs
             // as JSON integers. The profile editor stores them as Double for sliders,
@@ -139,30 +142,38 @@ data class AutoRoutingOptions(
 data class TruckRoutingOptions(
     override val costingType: String = COSTING_TYPE_TRUCK,
 
-    // Basic auto options
-    override val maneuverPenalty: Double? = null,
+    // Heavy-vehicle defaults: prefer roads where a full-size articulated truck belongs.
+    override val maneuverPenalty: Double? = 45.0,
     override val gateCost: Double? = DEFAULT_GATE_COST,
     override val tollBoothCost: Double? = DEFAULT_TOLL_BOOTH_COST,
     override val privateAccessPenalty: Double? = null,
-    override val useHighways: Double? = null,
+    override val useHighways: Double? = 0.8,
     override val useTolls: Double? = null,
-    override val useLivingStreets: Double? = null,
-    override val useTracks: Double? = null,
-    override val ignoreClosures: Boolean? = null,
-    override val ignoreRestrictions: Boolean? = null,
-    override val ignoreOneWays: Boolean? = null,
-    override val ignoreAccess: Boolean? = null,
-    override val excludeUnpaved: Boolean? = null,
+    override val useLivingStreets: Double? = 0.0,
+    override val useTracks: Double? = 0.0,
+    override val ignoreClosures: Boolean? = false,
+    override val ignoreRestrictions: Boolean? = false,
+    override val ignoreOneWays: Boolean? = false,
+    override val ignoreAccess: Boolean? = false,
+    override val excludeUnpaved: Boolean? = true,
     override val excludeCashOnlyTolls: Boolean? = null,
 
-    // Truck-specific options
-    val length: Double? = null, // meters
-    val width: Double? = null,
-    val height: Double? = null,
-    val weight: Double? = null, // metric tons
-    val axleCount: Int? = null,
-    val hazmat: Boolean? = null,
-    val useTruckRoute: Double? = null // 0-1 range
+    // Generic/low-class road penalties are native Valhalla costing options. They do not
+    // hard-ban the destination street, but make residential/service detours expensive.
+    val servicePenalty: Double? = 300.0,
+    val serviceFactor: Double? = 5.0,
+    val lowClassPenalty: Double? = 300.0,
+    val closureFactor: Double? = 10.0,
+
+    // EU full-size articulated truck baseline. 16.5 m is the standard articulated
+    // vehicle maximum used as the built-in default; users can override every value.
+    val length: Double? = 16.5, // meters
+    val width: Double? = 2.5,
+    val height: Double? = 4.0,
+    val weight: Double? = 45.0, // metric tons, Kapijuja operational default
+    val axleCount: Int? = 3,
+    val hazmat: Boolean? = false,
+    val useTruckRoute: Double? = 1.0 // 0-1 range, prefer hgv=designated network
 ) : RoutingOptions(), AutoOptions {
 
     companion object {
@@ -183,27 +194,36 @@ data class TruckRoutingOptions(
 data class BusRoutingOptions(
     override val costingType: String = COSTING_TYPE_BUS,
 
-    // Basic motor-vehicle options
-    override val maneuverPenalty: Double? = null,
+    // Full-size coach defaults. Avoid living streets/tracks and heavily penalize service
+    // roads/alleys while still allowing a genuine destination last mile when unavoidable.
+    override val maneuverPenalty: Double? = 45.0,
     override val gateCost: Double? = DEFAULT_GATE_COST,
     override val tollBoothCost: Double? = DEFAULT_TOLL_BOOTH_COST,
     override val privateAccessPenalty: Double? = null,
-    override val useHighways: Double? = null,
+    override val useHighways: Double? = 0.8,
     override val useTolls: Double? = null,
-    override val useLivingStreets: Double? = null,
-    override val useTracks: Double? = null,
-    override val ignoreClosures: Boolean? = null,
-    override val ignoreRestrictions: Boolean? = null,
-    override val ignoreOneWays: Boolean? = null,
-    override val ignoreAccess: Boolean? = null,
-    override val excludeUnpaved: Boolean? = null,
+    override val useLivingStreets: Double? = 0.0,
+    override val useTracks: Double? = 0.0,
+    override val ignoreClosures: Boolean? = false,
+    override val ignoreRestrictions: Boolean? = false,
+    override val ignoreOneWays: Boolean? = false,
+    override val ignoreAccess: Boolean? = false,
+    override val excludeUnpaved: Boolean? = true,
     override val excludeCashOnlyTolls: Boolean? = null,
 
-    // Physical vehicle restrictions supported by Valhalla AutoCost/BusCost
-    val length: Double? = null, // meters
-    val width: Double? = null,
-    val height: Double? = null,
-    val weight: Double? = null, // metric tons
+    val servicePenalty: Double? = 300.0,
+    val serviceFactor: Double? = 5.0,
+    val alleyFactor: Double? = 10.0,
+    val closureFactor: Double? = 10.0,
+
+    // Kapijuja tourist-coach baseline.
+    val length: Double? = 13.5, // meters
+    val width: Double? = 2.5,
+    val height: Double? = 4.0,
+    val weight: Double? = 18.0, // metric tons
+    // Persisted for the profile and future toll/restriction integrations. Current Valhalla
+    // auto/bus costing does not accept axle_count, so serialization removes it for BUS.
+    val axleCount: Int? = 3,
 
     // App-only policy selector. Not serialized into Valhalla costing_options.
     val lineBus: Boolean = false

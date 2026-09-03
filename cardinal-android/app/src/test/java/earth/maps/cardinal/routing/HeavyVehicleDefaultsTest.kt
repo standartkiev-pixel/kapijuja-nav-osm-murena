@@ -1,0 +1,59 @@
+package earth.maps.cardinal.routing
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class HeavyVehicleDefaultsTest {
+    @Test
+    fun `truck defaults describe full size articulated vehicle and avoid low class roads`() {
+        val options = TruckRoutingOptions()
+        assertEquals(16.5, options.length!!, 0.0)
+        assertEquals(2.5, options.width!!, 0.0)
+        assertEquals(4.0, options.height!!, 0.0)
+        assertEquals(45.0, options.weight!!, 0.0)
+        assertEquals(3, options.axleCount)
+        assertEquals(1.0, options.useTruckRoute!!, 0.0)
+        assertEquals(0.0, options.useLivingStreets!!, 0.0)
+        assertTrue(options.excludeUnpaved == true)
+        assertEquals(300.0, options.lowClassPenalty!!, 0.0)
+    }
+
+    @Test
+    fun `coach defaults describe three axle 13 point 5 metre bus`() {
+        val options = BusRoutingOptions()
+        assertEquals(13.5, options.length!!, 0.0)
+        assertEquals(2.5, options.width!!, 0.0)
+        assertEquals(4.0, options.height!!, 0.0)
+        assertEquals(18.0, options.weight!!, 0.0)
+        assertEquals(3, options.axleCount)
+        assertFalse(options.lineBus)
+        assertEquals(0.0, options.useLivingStreets!!, 0.0)
+        assertTrue(options.excludeUnpaved == true)
+    }
+
+    @Test
+    fun `bus axle count stays app side while physical dimensions reach Valhalla`() {
+        val json = BusRoutingOptions().toValhallaOptionsJson(
+            costingProfileOverride = ValhallaCostingProfile.Auto
+        )
+        assertFalse(json.contains("axle_count"))
+        assertTrue(json.contains("\"length\":13.5"))
+        assertTrue(json.contains("\"width\":2.5"))
+        assertTrue(json.contains("\"height\":4.0"))
+        assertTrue(json.contains("\"weight\":18.0"))
+        assertTrue(json.contains("\"service_penalty\":300.0"))
+    }
+
+    @Test
+    fun `truck low class and truck route preferences reach Valhalla`() {
+        val json = TruckRoutingOptions().toValhallaOptionsJson(
+            costingProfileOverride = ValhallaCostingProfile.Truck
+        )
+        assertTrue(json.contains("\"low_class_penalty\":300.0"))
+        assertTrue(json.contains("\"use_truck_route\":1.0"))
+        assertTrue(json.contains("\"axle_count\":3"))
+        assertTrue(json.contains("\"closure_factor\":10.0"))
+    }
+}

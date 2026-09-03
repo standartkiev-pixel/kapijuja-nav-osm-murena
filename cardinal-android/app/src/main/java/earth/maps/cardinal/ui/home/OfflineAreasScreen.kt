@@ -63,6 +63,8 @@ import earth.maps.cardinal.R
 import earth.maps.cardinal.R.dimen
 import earth.maps.cardinal.R.drawable
 import earth.maps.cardinal.data.BoundingBox
+import earth.maps.cardinal.data.EuropeanCountryDownloadRegion
+import earth.maps.cardinal.data.EuropeanCountryDownloads
 import earth.maps.cardinal.data.room.DownloadStatus
 import earth.maps.cardinal.data.room.OfflineArea
 import kotlinx.coroutines.launch
@@ -88,12 +90,41 @@ fun OfflineAreasScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var areaToDelete by remember { mutableStateOf<OfflineArea?>(null) }
     var selectedArea by remember { mutableStateOf<OfflineArea?>(null) }
+    var showEuropeCountries by remember { mutableStateOf(false) }
+    var countryToDownload by remember { mutableStateOf<EuropeanCountryDownloadRegion?>(null) }
 
     // Format for displaying dates
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
     val zoomInMessage = stringResource(R.string.zoom_in_to_download_an_area)
 
     val coroutineScope = rememberCoroutineScope()
+
+    if (showEuropeCountries) {
+        EuropeCountryDownloadScreen(
+            viewModel = viewModel,
+            isDownloading = isDownloading,
+            onBack = { showEuropeCountries = false },
+            onCountrySelected = { countryToDownload = it }
+        )
+
+        countryToDownload?.let { country ->
+            CountryDownloadConfirmationDialog(
+                country = country,
+                estimatedTileCount = viewModel.estimateTileCount(
+                    country.boundingBox,
+                    OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
+                    OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
+                ),
+                onDismiss = { countryToDownload = null },
+                onDownload = {
+                    viewModel.startDownload(country.boundingBox, country.name)
+                    countryToDownload = null
+                    showEuropeCountries = false
+                }
+            )
+        }
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -122,7 +153,22 @@ fun OfflineAreasScreen(
             }
         }
 
-        // Download button
+        Button(
+            onClick = { showEuropeCountries = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = dimensionResource(dimen.padding_minor)),
+            enabled = !isDownloading
+        ) {
+            Icon(
+                painter = painterResource(drawable.cloud_download_24dp),
+                contentDescription = null,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text("Europe - download entire country")
+        }
+
+        // Existing viewport-area download is deliberately preserved as a secondary tool.
         Button(
             onClick = {
                 if (currentZoom < 8) {
@@ -417,6 +463,109 @@ fun DownloadAreaDialog(
                 Text(stringResource(R.string.cancel))
             }
         })
+}
+
+@Composable
+private fun EuropeCountryDownloadScreen(
+    viewModel: OfflineAreasViewModel,
+    isDownloading: Boolean,
+    onBack: () -> Unit,
+    onCountrySelected: (EuropeanCountryDownloadRegion) -> Unit
+) {
+    val countries = remember { EuropeanCountryDownloads.regions() }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(dimensionResource(dimen.padding_minor))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = dimensionResource(dimen.padding)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(drawable.ic_arrow_back),
+                    contentDescription = stringResource(R.string.back)
+                )
+            }
+            Text(
+                text = "Europe",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Text(
+            text = "Choose a country. The complete country package includes basemap, offline Valhalla routing and offline geocoder data.",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(bottom = dimensionResource(dimen.padding))
+        )
+        LazyColumn {
+            items(countries, key = { it.countryCode }) { country ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clickable(enabled = !isDownloading) { onCountrySelected(country) },
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(dimensionResource(dimen.padding)),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(country.name, style = MaterialTheme.typography.titleMedium)
+                            Text(country.countryCode, style = MaterialTheme.typography.bodySmall)
+                        }
+                        val count = viewModel.estimateTileCount(
+                            country.boundingBox,
+                            OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
+                            OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
+                        )
+                        Text("~$count tiles", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CountryDownloadConfirmationDialog(
+    country: EuropeanCountryDownloadRegion,
+    estimatedTileCount: Int,
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(country.name) },
+        text = {
+            Column {
+                Text("Download the entire country as one offline area?")
+                Text(
+                    "Estimated basemap tiles: $estimatedTileCount",
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Routing tiles and geocoder data are downloaded by the existing offline pipeline after the basemap stage.",
+                    modifier = Modifier.padding(top = 8.dp),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDownload) { Text("Download") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
 }
 
 fun formatFileSize(bytes: Long): String {
