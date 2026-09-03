@@ -68,7 +68,7 @@ abstract class RoutingOptions {
                 "country_crossing_penalty",
                 "ferry_cost",
                 "rail_ferry_cost"
-            ).forEach(::normalizeIntegerCost)
+            ).forEach { name -> this.normalizeIntegerCost(name) }
         }
         val wrapper = object {
             val alternates = 5
