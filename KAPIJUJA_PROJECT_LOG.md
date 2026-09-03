@@ -6,7 +6,7 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 
 1. Start from a clean upstream Murena Maps/Cardinal source baseline.
 2. First goal: compile and test the upstream application essentially unchanged.
-3. Do **not** add BUS/TRUCK profiles or Stadia/Valhalla modifications until the clean baseline APK has been built and tested on the target device.
+3. Do **not** add BUS/TRUCK profiles or custom Stadia/Valhalla routing modifications until the clean baseline APK has been built and tested on the target device.
 4. Keep previous Kapijuja repositories only as references/test laboratories; do not mix their experimental code into this clean line.
 5. Record every import, build-only fix, failed experiment, workflow run, artifact and later functional patch in this file.
 6. Prefer high-level changes. Do not modify MapLibre/Ferrostar/native navigation internals unless evidence shows it is necessary.
@@ -26,7 +26,7 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - BUS costing.
 - Truck profile.
 - Vehicle dimensions/weight UI.
-- `STADIA_API_KEY` integration.
+- Custom Stadia/Valhalla BUS integration.
 - Branding changes beyond what is strictly required to build.
 - Feature changes of any kind.
 
@@ -57,7 +57,18 @@ This repository is the clean product line for Kapijuja Nav based on the upstream
 - Exact upstream commit: `f9a061aff58ec7f11dc7fa19bd0138720fc99b01`
 - Upstream commit date: `2026-09-03T15:21:13Z`
 - Upstream commit subject: `Translated using Weblate (Portuguese (Brazil))`
+- Kapijuja import commit: `0adf78dd4801e71494f1dc5001734589dc025069`.
+- Bootstrap GitHub Actions run: `33773338841` — success.
 - Import method: shallow clone in GitHub Actions followed by a source-tree snapshot copy; the upstream `.git` directory is intentionally not copied.
 - Files retained in addition to upstream: this project log, the bootstrap workflow, and upstream provenance marker files.
-- No BUS/TRUCK/Stadia/vehicle-profile functional modification is part of this import.
-- Next gate: inspect the upstream build instructions and compile a stock debug APK before any product feature changes.
+- No BUS/TRUCK/custom routing/vehicle-profile functional modification is part of this import.
+
+## 2026-09-03 — stock baseline build preparation
+
+- Read upstream `cardinal-android/AGENTS.md` and `.gitlab-ci.yml` before creating our CI.
+- Upstream application is a full Kotlin/Compose navigation app with MapLibre, Ferrostar, Valhalla, settings, routing profiles, saved places, transit, offline areas, TTS and a Rust/UniFFI geocoder.
+- Current Android configuration: application ID `com.murena.maps` (`.debug` suffix for debug), compileSdk 37, minSdk 26, targetSdk 36, Java 17, ARM64 and x86_64 architecture flavors.
+- Upstream's own CI builds ARM64 debug by installing Rust + Cargo NDK + Android NDK 29.0.14206865 + CMake 3.22.1, running the upstream `hideSecret` task, generating UniFFI bindings, then `assembleArm64Debug`.
+- Upstream itself uses Stadia endpoints for its standard Pelias geocoder and Valhalla router. Therefore the repository secret `STADIA_API_KEY` will be passed to the unmodified upstream `hideSecret` task only to reproduce normal Murena functionality. This is **not** the postponed custom BUS/Stadia integration.
+- No secret value is committed to the repository or printed intentionally.
+- Next experiment: reproduce the upstream ARM64 debug build in GitHub Actions without changing application source code.
