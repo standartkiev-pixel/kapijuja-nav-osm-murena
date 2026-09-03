@@ -41,17 +41,42 @@ class TrafficRouteFallbackTest {
         assertEquals(2, fetchCount)
     }
 
+    @Test
+    fun `paid traffic entitlement failure retries without traffic`() = runTest {
+        listOf(402, 403).forEach { status ->
+            var trafficEnabled = false
+            var fetchCount = 0
+            val fallbackRoute = route()
+
+            val result = runTrafficFallbackRouteRequest(
+                supportsTraffic = true,
+                isTrafficEnabled = { trafficEnabled },
+                setTrafficEnabled = { trafficEnabled = it },
+                fetchRoutes = {
+                    fetchCount += 1
+                    if (fetchCount == 1) {
+                        throw InvalidStatusCodeException(statusCode = status)
+                    }
+                    listOf(fallbackRoute)
+                }
+            )
+
+            assertEquals(listOf(fallbackRoute), result.routes)
+            assertFalse(result.trafficAvailable)
+            assertFalse(trafficEnabled)
+            assertEquals(2, fetchCount)
+        }
+    }
+
     @Test(expected = InvalidStatusCodeException::class)
     fun `network outage status does not retry without traffic`() = runTest {
         var trafficEnabled = false
-        var fetchCount = 0
 
         runTrafficFallbackRouteRequest(
             supportsTraffic = true,
             isTrafficEnabled = { trafficEnabled },
             setTrafficEnabled = { trafficEnabled = it },
             fetchRoutes = {
-                fetchCount += 1
                 throw InvalidStatusCodeException(statusCode = 503)
             }
         )
