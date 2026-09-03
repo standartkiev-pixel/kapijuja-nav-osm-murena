@@ -161,6 +161,7 @@
     <string name="pelias_api_key_title">Pelias API Key</string>
     <string name="valhalla_base_url_title">Valhalla Base URL</string>
     <string name="valhalla_api_key_title">Valhalla API Key</string>
+    <string name="reset_api_settings_to_defaults">Reset API settings to defaults</string>
     <string name="continuous_location_tracking_disabled_title">Continuous Location Tracking</string>
     <string name="continuous_location_tracking_disabled_help_text">Turning this off can save battery</string>
     <string name="show_zoom_fabs_title">Show Zoom Buttons</string>
