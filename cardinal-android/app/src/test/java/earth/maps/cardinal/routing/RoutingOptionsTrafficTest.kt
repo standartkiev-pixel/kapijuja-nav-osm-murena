@@ -23,11 +23,11 @@ class RoutingOptionsTrafficTest {
     }
 
     @Test
-    fun `truck mode uses standard traffic profile when traffic is enabled`() {
+    fun `truck mode uses premium traffic profile when traffic is enabled`() {
         val profile = RoutingMode.TRUCK.valhallaCostingProfile(useTraffic = true)
 
         assertTrue(profile is ValhallaCostingProfile.TruckTraffic)
-        assertEquals("truck_traffic", profile.routeProviderProfile)
+        assertEquals("truck_traffic_premium", profile.routeProviderProfile)
         assertEquals("truck", profile.costingOptionsKey)
     }
 
