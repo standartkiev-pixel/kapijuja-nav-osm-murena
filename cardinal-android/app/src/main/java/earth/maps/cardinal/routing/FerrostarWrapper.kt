@@ -291,7 +291,7 @@ class FerrostarWrapper(
                 null
             }
 
-            if (route != null) {
+            if (route != null && route.distance <= maxOffsetMeters) {
                 return HeavyVehicleAccessApproach(
                     route = route,
                     relaxation = relaxation
