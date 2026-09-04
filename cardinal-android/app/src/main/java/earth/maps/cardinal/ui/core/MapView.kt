@@ -61,6 +61,8 @@ import earth.maps.cardinal.data.desaturate
 import earth.maps.cardinal.data.formatDuration
 import earth.maps.cardinal.data.parseRouteColor
 import earth.maps.cardinal.data.room.OfflineArea
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
+import earth.maps.cardinal.routing.HeavyVehicleAccessRelaxation
 import earth.maps.cardinal.routing.TrafficEtaCalibration
 import earth.maps.cardinal.routing.TrafficLevel
 import earth.maps.cardinal.routing.TrafficRouteSegments
@@ -137,7 +139,7 @@ fun MapView(
     allRoutes: List<Route>,
     trafficAvailable: Boolean = false,
     etaCorrectionFactor: Double = 1.0,
-    accessApproachRoute: Route? = null,
+    accessApproach: HeavyVehicleAccessApproach? = null,
     currentTransitItinerary: Itinerary? = null,
     highlightedTransitLegIndex: Int? = null,
     onRouteAnnotationClick: ((Int) -> Unit)? = null,
@@ -214,7 +216,7 @@ fun MapView(
                     allRoutes,
                     trafficAvailable,
                     etaCorrectionFactor,
-                    accessApproachRoute,
+                    accessApproach,
                     visibleRegion = cameraState.projection?.queryVisibleRegion(),
                     screenWidthDp = screenWidthDp,
                     screenHeightDp = screenHeightDp
@@ -342,7 +344,7 @@ private fun RouteLayer(
     allRoutes: List<Route>,
     trafficAvailable: Boolean,
     etaCorrectionFactor: Double,
-    accessApproachRoute: Route?,
+    accessApproach: HeavyVehicleAccessApproach?,
     visibleRegion: VisibleRegion?,
     screenWidthDp: Dp,
     screenHeightDp: Dp
@@ -433,7 +435,7 @@ private fun RouteLayer(
         join = const(LineJoin.Round),
     )
 
-    accessApproachRoute?.geometry?.takeIf { it.size >= 2 }?.let { accessGeometry ->
+    accessApproach?.route?.geometry?.takeIf { it.size >= 2 }?.let { accessGeometry ->
         val accessFeature = Feature(
             geometry = LineString(
                 accessGeometry.map { coordinate -> Position(coordinate.lng, coordinate.lat) }
@@ -447,11 +449,12 @@ private fun RouteLayer(
                 )
             )
         )
+        val accessStyle = accessApproach.relaxation.previewStyle()
         LineLayer(
             id = "heavy_vehicle_access_approach_casing",
             source = accessSource,
             color = rgbColor(const(40), const(40), const(40)),
-            dasharray = const(listOf(1.4, 1.1)),
+            dasharray = const(accessStyle.dashArray),
             width = const(10.dp),
             opacity = const(0.9f),
             cap = const(LineCap.Round),
@@ -460,8 +463,12 @@ private fun RouteLayer(
         LineLayer(
             id = "heavy_vehicle_access_approach",
             source = accessSource,
-            color = rgbColor(const(255), const(183), const(0)),
-            dasharray = const(listOf(1.4, 1.1)),
+            color = rgbColor(
+                const(accessStyle.red),
+                const(accessStyle.green),
+                const(accessStyle.blue)
+            ),
+            dasharray = const(accessStyle.dashArray),
             width = const(6.dp),
             opacity = const(1f),
             cap = const(LineCap.Round),
@@ -596,6 +603,25 @@ private fun RouteAnnotations(
         textIgnorePlacement = const(true),
     )
 }
+
+private data class HeavyVehicleAccessPreviewStyle(
+    val red: Int,
+    val green: Int,
+    val blue: Int,
+    val dashArray: List<Double>
+)
+
+private fun HeavyVehicleAccessRelaxation.previewStyle(): HeavyVehicleAccessPreviewStyle =
+    when (this) {
+        HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
+            HeavyVehicleAccessPreviewStyle(255, 183, 0, listOf(1.4, 1.1))
+
+        HeavyVehicleAccessRelaxation.WEIGHT_RELAXED ->
+            HeavyVehicleAccessPreviewStyle(255, 122, 0, listOf(2.2, 1.0))
+
+        HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
+            HeavyVehicleAccessPreviewStyle(229, 57, 53, listOf(0.8, 0.8))
+    }
 
 private fun VisibleRegion.toRouteLabelBounds(): RouteLabelBounds {
     val latitudes = listOf(
