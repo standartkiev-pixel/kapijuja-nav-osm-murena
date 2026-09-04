@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.maps.cardinal.data.Place
 import earth.maps.cardinal.data.room.OfflineArea
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
 import earth.maps.cardinal.transit.Itinerary
 import kotlinx.coroutines.CoroutineScope
 import org.maplibre.compose.camera.CameraState
@@ -52,7 +53,7 @@ class AppContentState(
     allRoutes: List<Route> = emptyList(),
     trafficAvailable: Boolean = false,
     etaCorrectionFactor: Double = 1.0,
-    accessApproachRoute: Route? = null,
+    accessApproach: HeavyVehicleAccessApproach? = null,
     currentTransitItinerary: Itinerary? = null,
     highlightedTransitLegIndex: Int? = null,
     screenHeightDp: Dp = 0.dp,
@@ -67,7 +68,7 @@ class AppContentState(
     var allRoutes by mutableStateOf(allRoutes)
     var trafficAvailable by mutableStateOf(trafficAvailable)
     var etaCorrectionFactor by mutableStateOf(etaCorrectionFactor)
-    var accessApproachRoute by mutableStateOf(accessApproachRoute)
+    var accessApproach by mutableStateOf(accessApproach)
     var currentTransitItinerary by mutableStateOf(currentTransitItinerary)
     var highlightedTransitLegIndex by mutableStateOf(highlightedTransitLegIndex)
     var screenHeightDp by mutableStateOf(screenHeightDp)
