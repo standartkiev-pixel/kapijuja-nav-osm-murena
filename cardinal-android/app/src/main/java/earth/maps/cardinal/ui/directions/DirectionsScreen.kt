@@ -84,6 +84,7 @@ import earth.maps.cardinal.data.TransitPlanState
 import earth.maps.cardinal.data.formatDuration
 import earth.maps.cardinal.data.room.RoutingProfile
 import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
+import earth.maps.cardinal.routing.HeavyVehicleAccessRelaxation
 import earth.maps.cardinal.routing.TrafficEtaCalibration
 import earth.maps.cardinal.ui.core.CardinalNavigator
 import earth.maps.cardinal.ui.core.CardinalRoute
@@ -739,6 +740,17 @@ fun RouteDisplayHandler(
     }
 }
 
+private fun HeavyVehicleAccessRelaxation.driverWarning(): String = when (this) {
+    HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
+        "Caution: dashed final approach ignores access restrictions; vehicle dimensions remain enforced."
+
+    HeavyVehicleAccessRelaxation.WEIGHT_RELAXED ->
+        "Caution: orange dashed final approach also ignores vehicle weight. Length, width and height remain enforced."
+
+    HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
+        "Last resort: red dashed final approach ignores weight and length. Width and height remain enforced."
+}
+
 @Composable
 private fun PlaceField(
     label: String,
@@ -972,6 +984,22 @@ private fun FerrostarRouteResults(
                                 text = formatDuration(totalDuration),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        routeState.accessApproach?.let { approach ->
+                            Text(
+                                text = approach.relaxation.driverWarning(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = when (approach.relaxation) {
+                                    HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
+                                        MaterialTheme.colorScheme.tertiary
+
+                                    HeavyVehicleAccessRelaxation.WEIGHT_RELAXED,
+                                    HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
+                                        MaterialTheme.colorScheme.error
+                                },
+                                modifier = Modifier.padding(bottom = dimensionResource(dimen.padding))
                             )
                         }
 
