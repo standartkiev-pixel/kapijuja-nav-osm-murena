@@ -32,17 +32,17 @@ import javax.inject.Singleton
 @Singleton
 class RouteRepository @Inject constructor() {
     private val routeCache = ConcurrentHashMap<String, Route>()
-    private val accessApproachCache = ConcurrentHashMap<String, Route>()
+    private val accessApproachCache = ConcurrentHashMap<String, HeavyVehicleAccessApproach>()
     private val routeIds = ConcurrentLinkedQueue<String>()
 
     /**
      * Stores a route in the cache and returns its unique identifier.
      * Maintains a maximum of MAX_ROUTES routes, removing the oldest when necessary.
      */
-    fun storeRoute(route: Route, accessApproachRoute: Route? = null): String {
+    fun storeRoute(route: Route, accessApproach: HeavyVehicleAccessApproach? = null): String {
         val id = UUID.randomUUID().toString()
         routeCache[id] = route
-        accessApproachRoute?.let { accessApproachCache[id] = it }
+        accessApproach?.let { accessApproachCache[id] = it }
         routeIds.offer(id)
 
         // If we exceed the maximum number of routes, remove the oldest one
@@ -62,7 +62,7 @@ class RouteRepository @Inject constructor() {
      */
     fun getRoute(id: String): Route? = routeCache[id]
 
-    fun getAccessApproachRoute(id: String): Route? = accessApproachCache[id]
+    fun getAccessApproach(id: String): HeavyVehicleAccessApproach? = accessApproachCache[id]
 
     companion object {
         // In theory we only need one, but it's cheap to store two just in case something weird happens.
