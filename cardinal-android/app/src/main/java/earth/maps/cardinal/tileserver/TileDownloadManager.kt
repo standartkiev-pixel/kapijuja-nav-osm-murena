@@ -82,7 +82,7 @@ class TileDownloadManager(
         // hundreds of thousands of small basemap requests, so serial I/O is far too slow,
         // but aggressive fan-out can overload the provider or the device.
         private const val MAX_CONCURRENT_DOWNLOADS = 8
-        private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 4
+        private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 8
         private const val GEOCODER_BATCH_SIZE = 200
         private const val MAX_RETRY_COUNT = 3
         private const val COUNTRY_AREA_PREFIX = "country-"
@@ -989,90 +989,128 @@ class TileDownloadManager(
         db: SQLiteDatabase,
         areaName: String
     ): Pair<Int, Int> {
-        // Get Valhalla tiles for the bounding box
-        val valhallaTiles = ValhallaTileUtils.tilesForBoundingBox(boundingBox)
-        val totalValhallaTiles = valhallaTiles.size
+        val expectedTiles = ValhallaTileUtils.tilesForBoundingBox(boundingBox)
+        val totalValhallaTiles = expectedTiles.size
         var downloadedCount = 0
-        var failedCount = 0
 
         Log.d(TAG, "Total Valhalla tiles to download: $totalValhallaTiles")
-
-        logExistingValhallaTileCount(db, areaId)
         ensureValhallaTilesDirectory()
 
-        // Read the existing references once, then download a small batch in parallel.
-        // File writes are independent; database reference writes stay sequential.
+        // MBTiles references are the source of truth for already installed graph files.
+        // Mirror them into Room so resume/progress logic remains truthful after app restarts.
         val existingTiles = loadExistingValhallaTiles(db, areaId)
+            .filterTo(mutableSetOf()) { (level, index) ->
+                val path = loadValhallaTilePath(db, level, index, areaId)
+                path != null && File(path).isFile && File(path).length() > 0L
+            }
+
+        if (existingTiles.isNotEmpty()) {
+            downloadedTileDao.insertDownloadedTiles(
+                existingTiles.map { (level, index) ->
+                    DownloadedTile.forValhallaTile(areaId, level, index)
+                }
+            )
+        }
+
+        val completedTiles = existingTiles.toMutableSet()
         val globalTiles = loadGlobalValhallaTilePaths(db)
-        var completedCount = existingTiles.size
-        var reusedCount = 0
 
-        val pendingTiles = mutableListOf<Pair<Int, Int>>()
-        for ((hierarchyLevel, tileIndex) in valhallaTiles) {
-            val key = Pair(hierarchyLevel, tileIndex)
-            if (key in existingTiles) continue
-
+        // Reuse graph files already downloaded for a neighbouring country. This only creates
+        // another reference; the physical .gph file is not downloaded or duplicated.
+        val reused = mutableListOf<Triple<Int, Int, String>>()
+        for ((level, index) in expectedTiles) {
+            val key = Pair(level, index)
+            if (key in completedTiles) continue
             val existingPath = globalTiles[key]
-            if (existingPath != null && File(existingPath).exists()) {
-                storeValhallaTileReference(db, hierarchyLevel, tileIndex, existingPath, areaId)
-                downloadedCount++
-                completedCount++
-                reusedCount++
-            } else {
-                pendingTiles.add(key)
+            if (existingPath != null && File(existingPath).isFile && File(existingPath).length() > 0L) {
+                reused.add(Triple(level, index, existingPath))
+                completedTiles.add(key)
             }
         }
 
-        if (reusedCount > 0) {
-            Log.d(TAG, "Reused $reusedCount Valhalla routing tiles from neighbouring offline areas")
+        if (reused.isNotEmpty()) {
+            batchStoreValhallaTileReferences(db, reused, areaId)
+            downloadedTileDao.insertDownloadedTiles(
+                reused.map { (level, index, _) ->
+                    DownloadedTile.forValhallaTile(areaId, level, index)
+                }
+            )
+            downloadedCount += reused.size
             progressReporter?.updateProgress(
                 areaId = areaId,
                 areaName = areaName,
                 currentStage = DownloadStage.VALHALLA,
-                stageProgress = completedCount,
+                stageProgress = completedTiles.size,
                 stageTotal = totalValhallaTiles,
                 isCompleted = false,
                 hasError = false
             )
+            Log.d(TAG, "Reused ${reused.size} Valhalla routing tiles from existing offline areas")
         }
 
-        for (chunk in pendingTiles.chunked(MAX_CONCURRENT_VALHALLA_DOWNLOADS)) {
-            val results = coroutineScope {
-                chunk.map { (hierarchyLevel, tileIndex) ->
-                    async {
-                        Triple(
-                            hierarchyLevel,
-                            tileIndex,
-                            downloadValhallaTile(hierarchyLevel, tileIndex)
-                        )
-                    }
-                }.awaitAll()
+        // Retry only the graph files still missing. Each successful response is first installed
+        // atomically on disk, then its references are committed in one SQLite transaction.
+        var attempt = 1
+        while (attempt <= MAX_RETRY_COUNT) {
+            val unresolved = expectedTiles.filterNot { it in completedTiles }
+            if (unresolved.isEmpty()) break
+
+            if (attempt > 1) {
+                Log.w(
+                    TAG,
+                    "Valhalla retry pass $attempt/$MAX_RETRY_COUNT for ${unresolved.size} tiles"
+                )
+                delay(500L * (attempt - 1))
             }
 
-            for ((hierarchyLevel, tileIndex, result) in results) {
-                val (success, filePath) = result
-                if (success && filePath != null) {
-                    storeValhallaTileReference(db, hierarchyLevel, tileIndex, filePath, areaId)
-                    downloadedCount++
-                    completedCount++
-                } else {
-                    failedCount++
+            for (chunk in unresolved.chunked(MAX_CONCURRENT_VALHALLA_DOWNLOADS)) {
+                val results = coroutineScope {
+                    chunk.map { (level, index) ->
+                        async {
+                            Triple(level, index, downloadValhallaTile(level, index))
+                        }
+                    }.awaitAll()
+                }
+
+                val successful = results.mapNotNull { (level, index, result) ->
+                    val (success, path) = result
+                    if (success && path != null) Triple(level, index, path) else null
+                }
+
+                if (successful.isNotEmpty()) {
+                    batchStoreValhallaTileReferences(db, successful, areaId)
+                    downloadedTileDao.insertDownloadedTiles(
+                        successful.map { (level, index, _) ->
+                            DownloadedTile.forValhallaTile(areaId, level, index)
+                        }
+                    )
+                    for ((level, index, _) in successful) {
+                        completedTiles.add(Pair(level, index))
+                    }
+                    downloadedCount += successful.size
                 }
 
                 progressReporter?.updateProgress(
                     areaId = areaId,
                     areaName = areaName,
                     currentStage = DownloadStage.VALHALLA,
-                    stageProgress = completedCount,
+                    stageProgress = completedTiles.size,
                     stageTotal = totalValhallaTiles,
                     isCompleted = false,
                     hasError = false
                 )
             }
+
+            attempt++
         }
 
+        val unresolvedCount = expectedTiles.count { it !in completedTiles }
         performFinalValhallaConsistencyCheck(db, areaId)
-        return Pair(downloadedCount, failedCount)
+        Log.d(
+            TAG,
+            "Valhalla routing graph ready: ${completedTiles.size}/$totalValhallaTiles, unresolved: $unresolvedCount"
+        )
+        return Pair(downloadedCount, unresolvedCount)
     }
 
     /**
@@ -1109,6 +1147,20 @@ class TileDownloadManager(
             }
         }
         return result
+    }
+
+    private fun loadValhallaTilePath(
+        db: SQLiteDatabase,
+        hierarchyLevel: Int,
+        tileIndex: Int,
+        areaId: String
+    ): String? {
+        db.rawQuery(
+            "SELECT file_path FROM valhalla_tiles WHERE hierarchy_level = ? AND tile_index = ? AND area_id = ? LIMIT 1",
+            arrayOf(hierarchyLevel.toString(), tileIndex.toString(), areaId)
+        ).use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
     }
 
     /**
@@ -1245,70 +1297,66 @@ class TileDownloadManager(
         hierarchyLevel: Int,
         tileIndex: Int,
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
-        var fileOutputStream: FileOutputStream? = null
+        val url = ValhallaTileUtils.getTileUrl(
+            "https://tiles.maps.murena.com/valhalla-250825", hierarchyLevel, tileIndex
+        )
+        val tileFile = ValhallaTileUtils.getLocalTileFilePath(
+            File("${context.filesDir}/valhalla_tiles/"), hierarchyLevel, tileIndex
+        )
+        val partialFile = File(tileFile.absolutePath + ".part")
+
         try {
-            val url = ValhallaTileUtils.getTileUrl(
-                "https://tiles.maps.murena.com/valhalla-250825", hierarchyLevel, tileIndex
-            )
+            // A pending tile has no trusted database reference. Remove leftovers created by an
+            // interrupted older build so the routing engine can never read a partial .gph.
+            partialFile.delete()
+            if (tileFile.exists()) tileFile.delete()
 
             Log.v(TAG, "Downloading Valhalla tile $hierarchyLevel/$tileIndex from $url")
 
-            // Create file path for the tile
-            val tileFile = ValhallaTileUtils.getLocalTileFilePath(
-                File("${context.filesDir}/valhalla_tiles/"), hierarchyLevel, tileIndex
-            )
-
-            // Use streaming approach to avoid loading entire tile into memory
-            val statement = httpClient.prepareGet(url)
-            val totalBytes = statement.execute { response ->
-                // Check response code
+            val totalBytes = httpClient.prepareGet(url).execute { response ->
                 if (response.status.value != 200) {
-                    Log.e(
-                        TAG,
-                        "Error downloading Valhalla tile $hierarchyLevel/$tileIndex: HTTP ${response.status}"
+                    throw Exception(
+                        "HTTP ${response.status.value}: ${response.status.description}"
                     )
-                    throw Exception("HTTP ${response.status.value}: ${response.status.description}")
                 }
 
-                // Get the response channel for streaming
                 val channel = response.bodyAsChannel()
-                fileOutputStream = FileOutputStream(tileFile)
-
-                // Read and write in chunks to avoid OOM
-                val buffer = ByteArray(8192) // 8KB buffer
-                var totalBytesRead = 0L
-
-                while (true) {
-                    val bytesRead = channel.readAvailable(buffer)
-                    if (bytesRead == -1) break // End of stream
-
-                    fileOutputStream.write(buffer, 0, bytesRead)
-                    totalBytesRead += bytesRead
+                FileOutputStream(partialFile).use { output ->
+                    val buffer = ByteArray(32 * 1024)
+                    var totalBytesRead = 0L
+                    while (true) {
+                        val bytesRead = channel.readAvailable(buffer)
+                        if (bytesRead == -1) break
+                        if (bytesRead == 0) continue
+                        output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                    }
+                    output.flush()
+                    output.fd.sync()
+                    totalBytesRead
                 }
+            }
 
-                totalBytesRead
+            if (totalBytes <= 0L) {
+                throw Exception("Downloaded empty Valhalla tile")
+            }
+
+            if (!partialFile.renameTo(tileFile)) {
+                partialFile.copyTo(tileFile, overwrite = true)
+                partialFile.delete()
             }
 
             Log.v(
                 TAG,
-                "Downloaded Valhalla tile $hierarchyLevel/$tileIndex, size: $totalBytes bytes, saved to: ${tileFile.absolutePath}"
+                "Downloaded Valhalla tile $hierarchyLevel/$tileIndex, size: $totalBytes bytes, saved atomically to: ${tileFile.absolutePath}"
             )
-
             Pair(true, tileFile.absolutePath)
         } catch (e: Exception) {
+            partialFile.delete()
+            // The final path is deliberately absent on failure.
+            tileFile.delete()
             Log.e(TAG, "Error downloading Valhalla tile $hierarchyLevel/$tileIndex via HTTP", e)
             Pair(false, null)
-        } finally {
-            // Ensure file output stream is closed
-            try {
-                fileOutputStream?.close()
-            } catch (closeException: Exception) {
-                Log.w(
-                    TAG,
-                    "Error closing file output stream for Valhalla tile $hierarchyLevel/$tileIndex",
-                    closeException
-                )
-            }
         }
     }
 
@@ -1330,6 +1378,33 @@ class TileDownloadManager(
             statement.close()
         } catch (e: Exception) {
             Log.e(TAG, "Error storing Valhalla tile reference for $hierarchyLevel/$tileIndex", e)
+        }
+    }
+
+    private fun batchStoreValhallaTileReferences(
+        db: SQLiteDatabase,
+        tiles: List<Triple<Int, Int, String>>,
+        areaId: String
+    ) {
+        if (tiles.isEmpty()) return
+
+        val statement = db.compileStatement(
+            "INSERT OR REPLACE INTO valhalla_tiles (hierarchy_level, tile_index, file_path, area_id) VALUES (?, ?, ?, ?)"
+        )
+        db.beginTransaction()
+        try {
+            for ((level, index, path) in tiles) {
+                statement.bindLong(1, level.toLong())
+                statement.bindLong(2, index.toLong())
+                statement.bindString(3, path)
+                statement.bindString(4, areaId)
+                statement.executeInsert()
+                statement.clearBindings()
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            statement.close()
+            db.endTransaction()
         }
     }
 

@@ -31,40 +31,38 @@ import java.io.File
 
 class OfflineRoutingService(context: Context) : RoutingService {
 
-    private val valhallaConfigPath =
-        "${context.filesDir}/valhalla.json"
-    private val valhallaActor = ValhallaActor(valhallaConfigPath)
-
+    private val valhallaConfigPath = "${context.filesDir}/valhalla.json"
+    private val valhallaTilesDir = File(context.filesDir, "valhalla_tiles")
+    private val valhallaActor: ValhallaActor
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     init {
-        val writer = File(valhallaConfigPath).writer(Charsets.UTF_8)
-        writer.write(
-            GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-                .create().toJson(
-                    ValhallaConfigBuilder().withTileDir("${context.filesDir}/valhalla_tiles")
-                        .build()
-                )
-        )
-        writer.close()
+        // Build/write the config before constructing the native actor. On a clean install the
+        // previous order could instantiate ValhallaActor against a path that did not exist yet.
+        valhallaTilesDir.mkdirs()
+        val configJson = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+            .toJson(
+                ValhallaConfigBuilder()
+                    .withTileDir(valhallaTilesDir.absolutePath)
+                    .build()
+            )
+        File(valhallaConfigPath).writeText(configJson, Charsets.UTF_8)
+        valhallaActor = ValhallaActor(valhallaConfigPath)
     }
 
-    override suspend fun getRoute(
-        request: String
-    ): String {
+    override suspend fun getRoute(request: String): String {
         try {
             val valhallaResponse = coroutineScope.async {
-                valhallaActor.route(
-                    request
-                )
+                valhallaActor.route(request)
             }.await()
 
             Log.d(TAG, valhallaResponse)
-
             return valhallaResponse
         } catch (e: Exception) {
             Log.e(TAG, "Failed to route", e)
-            throw e // Re-throw because the clients catch these and show them to the user, real handy for a pre-prod app like this.
+            throw e
         }
     }
 
