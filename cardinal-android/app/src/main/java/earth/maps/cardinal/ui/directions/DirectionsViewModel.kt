@@ -175,6 +175,22 @@ class DirectionsViewModel @Inject constructor(
                     ferrostarWrapper.getRoutesWithTrafficFallback(userLocation, waypoints)
                 }
 
+                val accessApproachRoute = routes.routes.firstOrNull()?.let { strictRoute ->
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            ferrostarWrapper.getAccessApproachRoute(
+                                strictRoute = strictRoute,
+                                requestedDestination = GeographicCoordinate(
+                                    destination.latLng.latitude,
+                                    destination.latLng.longitude
+                                )
+                            )
+                        }.onFailure { error ->
+                            Log.w(TAG, "Heavy-vehicle access approach was unavailable", error)
+                        }.getOrNull()
+                    }
+                }
+
                 routeStateRepository.setRoutes(
                     routes = routes.routes,
                     trafficAvailable = routes.trafficAvailable,
@@ -183,7 +199,8 @@ class DirectionsViewModel @Inject constructor(
                     } else {
                         null
                     },
-                    etaCorrectionFactor = ferrostarWrapper.etaCorrectionFactor
+                    etaCorrectionFactor = ferrostarWrapper.etaCorrectionFactor,
+                    accessApproachRoute = accessApproachRoute
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -362,7 +379,10 @@ class DirectionsViewModel @Inject constructor(
     fun createTurnByTurnRoute(state: RouteState): CardinalRoute.TurnByTurnNavigation? =
         state.routes.getOrNull(state.selectedRouteIndex ?: 0)?.let { route ->
             CardinalRoute.TurnByTurnNavigation(
-                routeId = routeRepository.storeRoute(route),
+                routeId = routeRepository.storeRoute(
+                    route = route,
+                    accessApproachRoute = state.accessApproachRoute
+                ),
                 routingMode = selectedRoutingMode
             )
         }
