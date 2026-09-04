@@ -33,6 +33,11 @@ import org.maplibre.android.style.layers.Property.ICON_ANCHOR_BOTTOM
 import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
 import uniffi.ferrostar.RouteStep
+import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Composable
 @MapLibreComposable
@@ -41,6 +46,7 @@ fun TrafficRouteMapOverlay(
     route: Route?,
     remainingSteps: List<RouteStep>?,
     trafficAvailable: Boolean,
+    accessApproachRoute: Route? = null,
 ) {
     val trafficSegments = remember(route, remainingSteps, trafficAvailable) {
         val currentSteps = remainingSteps.orEmpty()
@@ -65,7 +71,30 @@ fun TrafficRouteMapOverlay(
         )
     }
 
-    DestinationFlag(route)
+    val accessDashSegments = remember(accessApproachRoute) {
+        accessApproachRoute?.geometry
+            ?.takeIf { it.size >= 2 }
+            ?.toFixedDashSegments()
+            .orEmpty()
+    }
+    accessDashSegments.forEach { dash ->
+        Polyline(
+            points = dash.map { it.toMapLibreLatLng() },
+            color = ACCESS_APPROACH_CASING_COLOR,
+            lineWidth = ACCESS_APPROACH_CASING_WIDTH,
+            zIndex = ACCESS_APPROACH_Z_INDEX
+        )
+    }
+    accessDashSegments.forEach { dash ->
+        Polyline(
+            points = dash.map { it.toMapLibreLatLng() },
+            color = ACCESS_APPROACH_COLOR,
+            lineWidth = ACCESS_APPROACH_LINE_WIDTH,
+            zIndex = ACCESS_APPROACH_Z_INDEX + 1
+        )
+    }
+
+    DestinationFlag(accessApproachRoute ?: route)
 }
 
 @Composable
@@ -106,6 +135,61 @@ private fun List<TrafficSegmentUi>.mergeAdjacentSegments(): List<TrafficSegmentU
 
 private fun GeographicCoordinate.toMapLibreLatLng(): LatLng = LatLng(lat, lng)
 
+private fun List<GeographicCoordinate>.toFixedDashSegments(
+    dashMeters: Double = 7.0,
+    gapMeters: Double = 5.0
+): List<List<GeographicCoordinate>> {
+    if (size < 2) return emptyList()
+
+    val result = mutableListOf<List<GeographicCoordinate>>()
+    var phaseMeters = 0.0
+
+    zipWithNext().forEach { (start, end) ->
+        val edgeMeters = start.distanceMetersTo(end)
+        if (edgeMeters <= 0.1) return@forEach
+
+        val pieceCount = ceil(edgeMeters / 2.0).toInt().coerceAtLeast(1)
+        for (piece in 0 until pieceCount) {
+            val t0 = piece.toDouble() / pieceCount
+            val t1 = (piece + 1).toDouble() / pieceCount
+            val midpointMeters = phaseMeters + edgeMeters * ((t0 + t1) / 2.0)
+            val period = dashMeters + gapMeters
+            if ((midpointMeters % period) < dashMeters) {
+                result += listOf(
+                    start.interpolateTo(end, t0),
+                    start.interpolateTo(end, t1)
+                )
+            }
+        }
+        phaseMeters += edgeMeters
+    }
+    return result
+}
+
+private fun GeographicCoordinate.interpolateTo(
+    other: GeographicCoordinate,
+    fraction: Double
+): GeographicCoordinate = GeographicCoordinate(
+    lat = lat + (other.lat - lat) * fraction,
+    lng = lng + (other.lng - lng) * fraction
+)
+
+private fun GeographicCoordinate.distanceMetersTo(other: GeographicCoordinate): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val lat1 = Math.toRadians(lat)
+    val lat2 = Math.toRadians(other.lat)
+    val deltaLat = lat2 - lat1
+    val deltaLng = Math.toRadians(other.lng - lng)
+    val a = sin(deltaLat / 2) * sin(deltaLat / 2) +
+        cos(lat1) * cos(lat2) * sin(deltaLng / 2) * sin(deltaLng / 2)
+    return 2 * earthRadiusMeters * atan2(sqrt(a), sqrt(1 - a))
+}
+
 private const val TRAFFIC_LINE_WIDTH = 8f
 private const val TRAFFIC_Z_INDEX = 1
-private const val DESTINATION_FLAG_Z_INDEX = 2
+private const val ACCESS_APPROACH_Z_INDEX = 3
+private const val ACCESS_APPROACH_CASING_WIDTH = 10f
+private const val ACCESS_APPROACH_LINE_WIDTH = 6f
+private const val ACCESS_APPROACH_CASING_COLOR = "#282828"
+private const val ACCESS_APPROACH_COLOR = "#FFB700"
+private const val DESTINATION_FLAG_Z_INDEX = 5
