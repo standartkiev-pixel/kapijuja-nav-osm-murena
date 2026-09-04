@@ -733,11 +733,47 @@ class TileDownloadManager(
                     failedTileIds
                 )
 
-                // Insert the successfully downloaded tiles into MBTiles database
+                // Persist actual tile bytes first. Only after MBTiles commit succeeds do we
+                // mark the same tiles successful in Room, so an interrupted write cannot create
+                // a false "downloaded" marker with missing map data.
                 if (tileData.isNotEmpty()) {
                     Log.d(TAG, "Inserting ${tileData.size} tiles into MBTiles database for chunk")
                     batchInsertTiles(db, tileData, areaId)
+
+                    val successRecords = tileData.map { (zoom, coords, _) ->
+                        val (x, y) = coords
+                        DownloadedTile(
+                            id = "basemap_${areaId}_${zoom}_${x}_${y}",
+                            areaId = areaId,
+                            tileType = TileType.BASEMAP,
+                            downloadTimestamp = System.currentTimeMillis(),
+                            retryCount = 0,
+                            zoom = zoom,
+                            tileX = x,
+                            tileY = y,
+                            processed = false,
+                            hierarchyLevel = null,
+                            tileIndex = null
+                        )
+                    }
+                    downloadedTileDao.insertDownloadedTiles(successRecords)
+
+                    for (record in successRecords) {
+                        successfulTileIds.add(record.id)
+                        failedTileIds.remove(record.id)
+                    }
+                    downloadedCount.addAndGet(successRecords.size)
                 }
+
+                progressReporter?.updateProgress(
+                    areaId = areaId,
+                    areaName = areaName,
+                    currentStage = DownloadStage.BASEMAP,
+                    stageProgress = downloadedCount.get(),
+                    stageTotal = remainingTiles,
+                    isCompleted = false,
+                    hasError = false
+                )
             }
 
             // Final consistency check
@@ -1171,35 +1207,17 @@ class TileDownloadManager(
         }.awaitAll()
 
         val results = mutableListOf<Triple<Int, Pair<Int, Int>, ByteArray>>()
-        val trackingRecords = mutableListOf<DownloadedTile>()
+        val failedRecords = mutableListOf<DownloadedTile>()
 
         for (attempt in attempts) {
             if (attempt.success && attempt.data != null) {
-                trackingRecords.add(
-                    DownloadedTile(
-                        id = attempt.tileId,
-                        areaId = areaId,
-                        tileType = TileType.BASEMAP,
-                        downloadTimestamp = System.currentTimeMillis(),
-                        retryCount = 0,
-                        zoom = attempt.z,
-                        tileX = attempt.x,
-                        tileY = attempt.y,
-                        processed = false,
-                        hierarchyLevel = null,
-                        tileIndex = null
-                    )
-                )
-                successfulTileIds?.add(attempt.tileId)
-                failedTileIds?.remove(attempt.tileId)
-                downloadedCount.incrementAndGet()
+                // Success is deliberately not written to Room here. The caller first commits
+                // tile bytes to MBTiles and then atomically records successful download state.
                 results.add(Triple(attempt.z, Pair(attempt.x, attempt.y), attempt.data))
-            } else if (attempt.success) {
-                successfulTileIds?.add(attempt.tileId)
-            } else {
+            } else if (!attempt.success) {
                 val retryCount = attempt.previousRetryCount + 1
                 if (retryCount < MAX_RETRY_COUNT) {
-                    trackingRecords.add(
+                    failedRecords.add(
                         DownloadedTile(
                             id = attempt.tileId,
                             areaId = areaId,
@@ -1230,21 +1248,8 @@ class TileDownloadManager(
             }
         }
 
-        // One Room transaction per network batch instead of one transaction per tile.
-        if (trackingRecords.isNotEmpty()) {
-            downloadedTileDao.insertDownloadedTiles(trackingRecords)
-        }
-
-        if (attempts.isNotEmpty()) {
-            progressReporter?.updateProgress(
-                areaId = areaId,
-                areaName = areaName,
-                currentStage = DownloadStage.BASEMAP,
-                stageProgress = downloadedCount.get(),
-                stageTotal = totalTiles,
-                isCompleted = false,
-                hasError = false
-            )
+        if (failedRecords.isNotEmpty()) {
+            downloadedTileDao.insertDownloadedTiles(failedRecords)
         }
 
         results
@@ -1381,6 +1386,7 @@ class TileDownloadManager(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error during batch insert of tiles", e)
+            throw e
         } finally {
             db.endTransaction()
         }
