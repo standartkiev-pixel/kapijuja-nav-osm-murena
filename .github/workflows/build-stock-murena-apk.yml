@@ -3,7 +3,7 @@ name: Build Kapijuja Murena ARM64 debug APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, critical-pass-2026-09-03 ]
+    branches: [ main, critical-pass-2026-09-03, offline-speedup-bus-default-2026-09-04 ]
     paths:
       - 'cardinal-android/**'
       - 'cardinal-geocoder/**'
