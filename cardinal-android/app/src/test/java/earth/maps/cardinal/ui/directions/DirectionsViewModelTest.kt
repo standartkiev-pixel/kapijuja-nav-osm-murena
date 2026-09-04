@@ -215,7 +215,7 @@ class DirectionsViewModelTest {
             every { mockFerrostarWrapper.etaCorrectionFactor } returns 1.15
             val mockRoute = mockk<Route>()
             coEvery {
-                mockFerrostarWrapper.getRoutesWithTrafficFallback(any(), any())
+                mockFerrostarWrapper.getRoutesWithNearestDestinationFirst(any(), any())
             } returns TrafficRouteResult(listOf(mockRoute), trafficAvailable = true)
 
             // Get initial state
@@ -330,7 +330,7 @@ class DirectionsViewModelTest {
         val mockFerrostarWrapper = mockk<FerrostarWrapper>()
         coEvery { mockFerrostarWrapperRepository.driving } returns mockFerrostarWrapper
         coEvery {
-            mockFerrostarWrapper.getRoutesWithTrafficFallback(any(), any())
+            mockFerrostarWrapper.getRoutesWithNearestDestinationFirst(any(), any())
         } throws Exception("Failed to get route")
 
         // Trigger the direction fetching
@@ -481,7 +481,7 @@ class DirectionsViewModelTest {
         val mockFerrostarWrapper = mockk<FerrostarWrapper>()
         coEvery { mockFerrostarWrapperRepository.driving } returns mockFerrostarWrapper
         coEvery {
-            mockFerrostarWrapper.getRoutesWithTrafficFallback(any(), any())
+            mockFerrostarWrapper.getRoutesWithNearestDestinationFirst(any(), any())
         } throws InvalidStatusCodeException(500)
 
         viewModel.updateFromPlace(fromPlace)
@@ -517,7 +517,7 @@ class DirectionsViewModelTest {
             description = "Distance exceeded"
         )
         coEvery {
-            mockFerrostarWrapper.getRoutesWithTrafficFallback(any(), any())
+            mockFerrostarWrapper.getRoutesWithNearestDestinationFirst(any(), any())
         } throws distanceExceededException
 
         val state = viewModel.routeState.value
