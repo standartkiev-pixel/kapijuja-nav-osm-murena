@@ -11,10 +11,12 @@ standartkiev-pixel/kapijuja-nav-osm-murena
 CANONICAL BRANCH:
 main
 
-CURRENT MAIN / WORKING STATE:
+CURRENT VERIFIED FUNCTIONAL CODE COMMIT:
 de51ac7fd93083914c316510cd449096e4022ae2
 
-The former working branch critical-pass-2026-09-03 is currently at the same commit. Do not restart the project from older TomTom/Kapijuja repositories. Those may be read only as historical references.
+README/project-log/handoff documentation commits may appear later on main; treat de51ac7fd93083914c316510cd449096e4022ae2 as the verified functional code state unless a later code commit has its own green build/device validation.
+
+The former working branch critical-pass-2026-09-03 reached this same verified functional code state. Do not restart the project from older TomTom/Kapijuja repositories. Those may be read only as historical references.
 
 CURRENT GREEN BUILD:
 GitHub Actions run 33834518093 — SUCCESS
