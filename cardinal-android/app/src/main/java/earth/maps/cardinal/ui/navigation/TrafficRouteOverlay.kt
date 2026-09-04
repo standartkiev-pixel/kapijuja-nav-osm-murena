@@ -74,11 +74,13 @@ fun TrafficRouteMapOverlay(
     }
 
     val accessDashSegments = remember(accessApproach) {
-        accessApproach?.route?.geometry
-            ?.takeIf { it.size >= 2 }
+        val approach = accessApproach ?: return@remember emptyList()
+        val style = approach.relaxation.navigationStyle()
+        approach.route.geometry
+            .takeIf { it.size >= 2 }
             ?.toFixedDashSegments(
-                dashMeters = accessApproach.relaxation.navigationStyle().dashMeters,
-                gapMeters = accessApproach.relaxation.navigationStyle().gapMeters
+                dashMeters = style.dashMeters,
+                gapMeters = style.gapMeters
             )
             .orEmpty()
     }
