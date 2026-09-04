@@ -43,6 +43,9 @@ import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,7 +77,12 @@ class TileDownloadManager(
     companion object {
         private const val MAX_BASEMAP_ZOOM = 14
         private const val OFFLINE_DATABASE_NAME = "offline_areas.mbtiles"
-        private const val MAX_CONCURRENT_DOWNLOADS = 10
+        // Keep network parallelism deliberately moderate. Country downloads contain
+        // hundreds of thousands of small basemap requests, so serial I/O is far too slow,
+        // but aggressive fan-out can overload the provider or the device.
+        private const val MAX_CONCURRENT_DOWNLOADS = 5
+        private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 4
+        private const val GEOCODER_BATCH_SIZE = 200
         private const val MAX_RETRY_COUNT = 3
     }
 
@@ -566,16 +574,21 @@ class TileDownloadManager(
                 area.copy(status = DownloadStatus.PROCESSING_GEOCODER, fileSize = fileSize)
             offlineAreaDao.updateOfflineArea(processingArea)
         }
+        val alreadyProcessed = downloadedTileDao.getProcessedTileCountForArea(areaId)
         val toProcess = downloadedTileDao.getUnprocessedTileCountForArea(areaId)
-        Log.d(TAG, "Updating progress at beginning of processing phase, $toProcess tiles to process")
+        val totalProcessingTiles = alreadyProcessed + toProcess
+        Log.d(
+            TAG,
+            "Updating processing progress: $alreadyProcessed already processed, $toProcess remaining"
+        )
 
         // Update service progress - downloads completed, now processing
         progressReporter?.updateProgress(
             areaId = areaId,
             areaName = name,
             currentStage = DownloadStage.PROCESSING,
-            stageProgress = 0,
-            stageTotal = toProcess,
+            stageProgress = alreadyProcessed,
+            stageTotal = totalProcessingTiles,
             isCompleted = false,
             hasError = false
         )
@@ -658,10 +671,20 @@ class TileDownloadManager(
 
             Log.d(TAG, "Total basemap tiles to process: $totalTilesToProcess")
 
-            // Validate consistency between expected tiles and existing tiles in database
-            val existingTileCount =
-                downloadedTileDao.getDownloadedTileCountForAreaAndType(areaId, TileType.BASEMAP)
-            Log.d(TAG, "Found $existingTileCount existing basemap tiles for area $areaId")
+            // Load resume state once. The old code queried Room once per tile which becomes
+            // extremely expensive for country-sized downloads. Failed retry records are kept
+            // separate so they are never mistaken for successfully downloaded tiles.
+            val successfulTileIds = downloadedTileDao
+                .getSuccessfulTileIdsForAreaAndType(areaId, TileType.BASEMAP)
+                .toMutableSet()
+            val failedTileIds = downloadedTileDao
+                .getFailedTileIdsForAreaAndType(areaId, TileType.BASEMAP)
+                .toMutableSet()
+            val existingTileCount = successfulTileIds.size
+            Log.d(
+                TAG,
+                "Found $existingTileCount successful basemap tiles and ${failedTileIds.size} retry candidates for area $areaId"
+            )
 
             // Calculate remaining tiles to download (not counting already downloaded ones)
             val remainingTiles = maxOf(0, totalTiles - existingTileCount)
@@ -690,7 +713,9 @@ class TileDownloadManager(
                     areaName,
                     remainingTiles, // Use remaining tiles instead of total for progress tracking
                     downloadedCount,
-                    failedCount
+                    failedCount,
+                    successfulTileIds,
+                    failedTileIds
                 )
 
                 // Insert the successfully downloaded tiles into MBTiles database
@@ -740,20 +765,69 @@ class TileDownloadManager(
         logExistingValhallaTileCount(db, areaId)
         ensureValhallaTilesDirectory()
 
-        // Process Valhalla tiles sequentially (one at a time to avoid memory issues)
-        for ((hierarchyLevel, tileIndex) in valhallaTiles) {
-            processValhallaTile(
-                hierarchyLevel, tileIndex, areaId, db, areaName,
-                totalValhallaTiles, downloadedCount
-            )?.let {
-                downloadedCount++
-            } ?: run {
-                failedCount++
+        // Read the existing references once, then download a small batch in parallel.
+        // File writes are independent; database reference writes stay sequential.
+        val existingTiles = loadExistingValhallaTiles(db, areaId)
+        var completedCount = existingTiles.size
+        val pendingTiles = valhallaTiles.filterNot { it in existingTiles }
+
+        for (chunk in pendingTiles.chunked(MAX_CONCURRENT_VALHALLA_DOWNLOADS)) {
+            val results = coroutineScope {
+                chunk.map { (hierarchyLevel, tileIndex) ->
+                    async {
+                        Triple(
+                            hierarchyLevel,
+                            tileIndex,
+                            downloadValhallaTile(hierarchyLevel, tileIndex)
+                        )
+                    }
+                }.awaitAll()
+            }
+
+            for ((hierarchyLevel, tileIndex, result) in results) {
+                val (success, filePath) = result
+                if (success && filePath != null) {
+                    storeValhallaTileReference(db, hierarchyLevel, tileIndex, filePath, areaId)
+                    downloadedCount++
+                    completedCount++
+                } else {
+                    failedCount++
+                }
+
+                progressReporter?.updateProgress(
+                    areaId = areaId,
+                    areaName = areaName,
+                    currentStage = DownloadStage.VALHALLA,
+                    stageProgress = completedCount,
+                    stageTotal = totalValhallaTiles,
+                    isCompleted = false,
+                    hasError = false
+                )
             }
         }
 
         performFinalValhallaConsistencyCheck(db, areaId)
         return Pair(downloadedCount, failedCount)
+    }
+
+    /**
+     * Load existing Valhalla references in one query so country downloads do not perform
+     * a SQLite existence query for every routing tile.
+     */
+    private fun loadExistingValhallaTiles(
+        db: SQLiteDatabase,
+        areaId: String
+    ): Set<Pair<Int, Int>> {
+        val result = mutableSetOf<Pair<Int, Int>>()
+        db.rawQuery(
+            "SELECT hierarchy_level, tile_index FROM valhalla_tiles WHERE area_id = ?",
+            arrayOf(areaId)
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                result.add(Pair(cursor.getInt(0), cursor.getInt(1)))
+            }
+        }
+        return result
     }
 
     /**
@@ -1031,24 +1105,24 @@ class TileDownloadManager(
         areaName: String,
         totalTiles: Int,
         downloadedCount: AtomicInteger,
-        failedCount: AtomicInteger
-    ): List<Triple<Int, Pair<Int, Int>, ByteArray>> {
-        val results = mutableListOf<Triple<Int, Pair<Int, Int>, ByteArray>>()
+        failedCount: AtomicInteger,
+        successfulTileIds: MutableSet<String>? = null,
+        failedTileIds: MutableSet<String>? = null
+    ): List<Triple<Int, Pair<Int, Int>, ByteArray>> = coroutineScope {
+        data class DownloadAttempt(
+            val z: Int,
+            val x: Int,
+            val y: Int,
+            val tileId: String,
+            val previousRetryCount: Int,
+            val success: Boolean,
+            val data: ByteArray?
+        )
 
-        // Process this batch sequentially (one tile at a time)
-        for ((z, xCoord, yCoord) in chunk) {
-            // Check if this tile has already been downloaded for this area
+        val attempts = chunk.mapNotNull { (z, xCoord, yCoord) ->
             val tileId = "basemap_${areaId}_${z}_${xCoord}_${yCoord}"
-            val existingTile = downloadedTileDao.getTileById(tileId)
-
-            if (existingTile != null) {
-                // Tile already downloaded, skip WITHOUT incrementing progress
-                Log.v(
-                    TAG, "Skipping already downloaded tile $z/$xCoord/$yCoord for area $areaId"
-                )
-                // Don't increment downloadedCount here - only increment for actual new downloads
-
-                // Update service progress with current count (not incremented)
+            val preloadedSuccess = successfulTileIds?.contains(tileId) == true
+            if (preloadedSuccess) {
                 progressReporter?.updateProgress(
                     areaId = areaId,
                     areaName = areaName,
@@ -1058,32 +1132,61 @@ class TileDownloadManager(
                     isCompleted = false,
                     hasError = false
                 )
-
-                // Skip this tile - don't add to results since it was already downloaded
-                continue
+                null
+            } else {
+                Triple(z, xCoord, yCoord)
             }
+        }.map { (z, xCoord, yCoord) ->
+            async {
+                val tileId = "basemap_${areaId}_${z}_${xCoord}_${yCoord}"
 
-            val (success, data) = downloadTile(z, xCoord, yCoord, areaId)
-            if (success && data != null) {
-                // Record this tile as downloaded
+                val existingTile = when {
+                    successfulTileIds == null -> downloadedTileDao.getTileById(tileId)
+                    failedTileIds?.contains(tileId) == true -> downloadedTileDao.getTileById(tileId)
+                    else -> null
+                }
+
+                if (existingTile != null && existingTile.retryCount == 0) {
+                    return@async DownloadAttempt(
+                        z, xCoord, yCoord, tileId, 0, true, null
+                    )
+                }
+
+                val (success, data) = downloadTile(z, xCoord, yCoord, areaId)
+                DownloadAttempt(
+                    z = z,
+                    x = xCoord,
+                    y = yCoord,
+                    tileId = tileId,
+                    previousRetryCount = existingTile?.retryCount ?: 0,
+                    success = success,
+                    data = data
+                )
+            }
+        }.awaitAll()
+
+        val results = mutableListOf<Triple<Int, Pair<Int, Int>, ByteArray>>()
+
+        for (attempt in attempts) {
+            if (attempt.success && attempt.data != null) {
                 val downloadedTile = DownloadedTile(
-                    id = tileId,
+                    id = attempt.tileId,
                     areaId = areaId,
                     tileType = TileType.BASEMAP,
                     downloadTimestamp = System.currentTimeMillis(),
                     retryCount = 0,
-                    zoom = z,
-                    tileX = xCoord,
-                    tileY = yCoord,
+                    zoom = attempt.z,
+                    tileX = attempt.x,
+                    tileY = attempt.y,
+                    processed = false,
                     hierarchyLevel = null,
                     tileIndex = null
                 )
                 downloadedTileDao.insertTile(downloadedTile)
+                successfulTileIds?.add(attempt.tileId)
+                failedTileIds?.remove(attempt.tileId)
 
-                // Update progress
                 val currentProgress = downloadedCount.incrementAndGet()
-
-                // Update service progress
                 progressReporter?.updateProgress(
                     areaId = areaId,
                     areaName = areaName,
@@ -1093,45 +1196,43 @@ class TileDownloadManager(
                     isCompleted = false,
                     hasError = false
                 )
-
-                results.add(Triple(z, Pair(xCoord, yCoord), data))
+                results.add(Triple(attempt.z, Pair(attempt.x, attempt.y), attempt.data))
+            } else if (attempt.success) {
+                successfulTileIds?.add(attempt.tileId)
             } else {
-                // Track failed tiles and implement retry logic
-                val existingFailedTile = downloadedTileDao.getTileById(tileId)
-                val retryCount = (existingFailedTile?.retryCount ?: 0) + 1
-
+                val retryCount = attempt.previousRetryCount + 1
                 if (retryCount < MAX_RETRY_COUNT) {
-                    // Record the failed attempt for future retry
                     val failedTile = DownloadedTile(
-                        id = tileId,
+                        id = attempt.tileId,
                         areaId = areaId,
                         tileType = TileType.BASEMAP,
                         downloadTimestamp = System.currentTimeMillis(),
                         retryCount = retryCount,
-                        zoom = z,
-                        tileX = xCoord,
-                        tileY = yCoord,
+                        zoom = attempt.z,
+                        tileX = attempt.x,
+                        tileY = attempt.y,
+                        processed = false,
                         hierarchyLevel = null,
                         tileIndex = null
                     )
                     downloadedTileDao.insertTile(failedTile)
+                    failedTileIds?.add(attempt.tileId)
+                    successfulTileIds?.remove(attempt.tileId)
                     Log.w(
                         TAG,
-                        "Failed to download tile $z/$xCoord/$yCoord for area $areaId (attempt $retryCount/$MAX_RETRY_COUNT)"
+                        "Failed to download tile ${attempt.z}/${attempt.x}/${attempt.y} for area $areaId (attempt $retryCount/$MAX_RETRY_COUNT)"
                     )
                 } else {
                     Log.e(
                         TAG,
-                        "Giving up on tile $z/$xCoord/$yCoord for area $areaId after $retryCount attempts"
+                        "Giving up on tile ${attempt.z}/${attempt.x}/${attempt.y} for area $areaId after $retryCount attempts"
                     )
                 }
-
                 failedCount.incrementAndGet()
-                // Don't add failed tiles to results
             }
         }
 
-        return results
+        results
     }
 
     /**
@@ -1600,75 +1701,78 @@ class TileDownloadManager(
     ) = withContext(Dispatchers.IO) {
         var db: SQLiteDatabase? = null
         try {
-            // Open database to read tiles
             val outputFile = File(context.filesDir, OFFLINE_DATABASE_NAME)
             db = SQLiteDatabase.openDatabase(
                 outputFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY
             )
 
-            Log.d(TAG, "Starting batch processing of tiles for area $areaId")
+            val alreadyProcessedIds = downloadedTileDao
+                .getProcessedBasemapTileIds(areaId)
+                .toHashSet()
+            val alreadyProcessedCount = alreadyProcessedIds.size
+            val remainingCount = downloadedTileDao.getUnprocessedTileCountForArea(areaId)
+            val totalTilesToProcess = alreadyProcessedCount + remainingCount
 
-            // Query all tiles for this area
+            Log.d(
+                TAG,
+                "Starting geocoder processing for area $areaId: $alreadyProcessedCount already processed, $remainingCount remaining"
+            )
+
             val cursor = db.rawQuery(
                 "SELECT zoom_level, tile_column, tile_row, tile_data FROM tiles WHERE area_id = ? AND zoom_level = 14",
                 arrayOf(areaId)
             )
 
-            val totalTilesToProcess = cursor.count
-
             var processedCount = 0
             var failedCount = 0
 
             try {
-                val batchSize = 20 // Process in smaller batches to manage memory
                 val tileBatch = mutableListOf<Triple<Int, Pair<Int, Int>, ByteArray>>()
-                var totalTilesProcessed = 0
 
                 while (cursor.moveToNext()) {
                     val zoom = cursor.getInt(0)
                     val x = cursor.getInt(1)
-                    val y = cursor.getInt(2)
+                    val storedTmsY = cursor.getInt(2)
+                    val xyzY = (2.0.pow(zoom.toDouble()) - 1 - storedTmsY).toInt()
+                    val tileId = "basemap_${areaId}_${zoom}_${x}_${xyzY}"
+
+                    if (tileId in alreadyProcessedIds) {
+                        continue
+                    }
+
                     val data = cursor.getBlob(3)
+                    tileBatch.add(Triple(zoom, Pair(x, storedTmsY), data))
 
-                    // Add to batch
-                    tileBatch.add(Triple(zoom, Pair(x, y), data))
-                    totalTilesProcessed++
-
-                    // Process batch when it reaches the batch size
-                    if (tileBatch.size >= batchSize) {
+                    if (tileBatch.size >= GEOCODER_BATCH_SIZE) {
                         val (batchProcessed, batchFailed) = processTileBatch(tileBatch, areaId)
                         processedCount += batchProcessed
                         failedCount += batchFailed
                         tileBatch.clear()
 
-                        // Update progress during processing phase
                         progressReporter?.updateProgress(
                             areaId = areaId,
                             areaName = "",
                             currentStage = DownloadStage.PROCESSING,
-                            stageProgress = processedCount,
+                            stageProgress = alreadyProcessedCount + processedCount,
                             stageTotal = totalTilesToProcess,
                             isCompleted = false,
                             hasError = false
                         )
 
-                        // Small delay between batches to prevent overwhelming the system
                         delay(5)
                     }
                 }
 
-                // Process remaining tiles in the last batch
                 if (tileBatch.isNotEmpty()) {
                     val (batchProcessed, batchFailed) = processTileBatch(tileBatch, areaId)
                     processedCount += batchProcessed
                     failedCount += batchFailed
 
-                    // Final progress update
                     progressReporter?.updateProgress(
                         areaId = areaId,
                         areaName = "",
                         currentStage = DownloadStage.PROCESSING,
-                        stageProgress = processedCount,
+                        stageProgress = alreadyProcessedCount + processedCount,
                         stageTotal = totalTilesToProcess,
                         isCompleted = false,
                         hasError = false
@@ -1676,9 +1780,9 @@ class TileDownloadManager(
                 }
 
                 Log.d(
-                    TAG, "Tile processing completed: $processedCount processed, $failedCount failed"
+                    TAG,
+                    "Tile processing completed: $processedCount newly processed, $failedCount failed"
                 )
-
             } finally {
                 cursor.close()
             }
@@ -1686,7 +1790,6 @@ class TileDownloadManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error during batch tile processing for area $areaId", e)
         } finally {
-            // Close database
             try {
                 db?.close()
             } catch (closeException: Exception) {
@@ -1709,6 +1812,8 @@ class TileDownloadManager(
                 val (x, y) = coords
                 val tmsY = (2.0.pow(zoom.toDouble()) - 1 - y).toInt()
                 tileProcessor?.processTile(data, zoom, x, tmsY)
+                val tileId = "basemap_${areaId}_${zoom}_${x}_${tmsY}"
+                downloadedTileDao.markTileProcessed(tileId)
                 processedCount++
                 Log.v(TAG, "Processed tile $zoom/$x/$y for area $areaId")
             } catch (e: Exception) {

@@ -10,6 +10,7 @@ import earth.maps.cardinal.data.room.OfflineArea
 import earth.maps.cardinal.data.room.OfflineAreaDao
 import earth.maps.cardinal.data.room.TileType
 import earth.maps.cardinal.geocoding.TileProcessor
+import earth.maps.cardinal.routing.BusRoutingOptions
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -534,6 +535,11 @@ class TileDownloadManagerTest {
                         it.status == DownloadStatus.DOWNLOADING_BASEMAP
             })
         }
+    }
+
+    @Test
+    fun `new bus options use native bus semantics by default`() {
+        assertTrue(BusRoutingOptions().lineBus)
     }
 
     @Test

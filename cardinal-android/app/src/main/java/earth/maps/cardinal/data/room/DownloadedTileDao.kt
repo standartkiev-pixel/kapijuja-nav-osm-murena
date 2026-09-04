@@ -48,14 +48,26 @@ interface DownloadedTileDao {
         tileType: TileType
     ): List<DownloadedTile>
 
-    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND tileType = :tileType")
+    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND tileType = :tileType AND retryCount = 0")
     suspend fun getDownloadedTileCountForAreaAndType(areaId: String, tileType: TileType): Int
 
-    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND COALESCE(processed, 0) <> 0")
+    @Query("SELECT id FROM downloaded_tiles WHERE areaId = :areaId AND tileType = :tileType AND retryCount = 0")
+    suspend fun getSuccessfulTileIdsForAreaAndType(areaId: String, tileType: TileType): List<String>
+
+    @Query("SELECT id FROM downloaded_tiles WHERE areaId = :areaId AND tileType = :tileType AND retryCount > 0")
+    suspend fun getFailedTileIdsForAreaAndType(areaId: String, tileType: TileType): List<String>
+
+    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND tileType = 'BASEMAP' AND retryCount = 0 AND COALESCE(processed, 0) <> 0 AND zoom = 14")
     suspend fun getProcessedTileCountForArea(areaId: String): Int
 
-    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND COALESCE(processed, 0) == 0 AND zoom = 14")
+    @Query("SELECT id FROM downloaded_tiles WHERE areaId = :areaId AND tileType = 'BASEMAP' AND retryCount = 0 AND COALESCE(processed, 0) <> 0 AND zoom = 14")
+    suspend fun getProcessedBasemapTileIds(areaId: String): List<String>
+
+    @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND tileType = 'BASEMAP' AND retryCount = 0 AND COALESCE(processed, 0) == 0 AND zoom = 14")
     suspend fun getUnprocessedTileCountForArea(areaId: String): Int
+
+    @Query("UPDATE downloaded_tiles SET processed = 1 WHERE id = :id")
+    suspend fun markTileProcessed(id: String)
 
     @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId")
     suspend fun getDownloadedTileCountForArea(areaId: String): Int

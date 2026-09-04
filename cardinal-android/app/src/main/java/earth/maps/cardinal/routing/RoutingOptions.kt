@@ -203,9 +203,12 @@ data class TruckRoutingOptions(
  * Routing options for a driver-controlled bus/coach.
  *
  * Current Valhalla BusCost uses AutoCostingOptions, including physical vehicle
- * height, width, length and weight. lineBus is an app-side selector:
- * false = tourist coach (auto access semantics with bus dimensions),
- * true = line/service bus (Valhalla bus access semantics).
+ * height, width, length and weight. lineBus is an app-side compatibility selector:
+ * false = optional car-access semantics with bus dimensions,
+ * true = native Valhalla bus/PSV access semantics.
+ *
+ * New Bus profiles default to native bus semantics. Existing saved values are preserved
+ * by normal profile deserialization; there is intentionally no migration/inversion.
  */
 data class BusRoutingOptions(
     override val costingType: String = COSTING_TYPE_BUS,
@@ -245,7 +248,7 @@ data class BusRoutingOptions(
     val axleCount: Int? = 3,
 
     // App-only policy selector. Not serialized into Valhalla costing_options.
-    val lineBus: Boolean = false
+    val lineBus: Boolean = true
 ) : RoutingOptions(), AutoOptions {
     companion object {
         const val COSTING_TYPE_BUS = "bus"
