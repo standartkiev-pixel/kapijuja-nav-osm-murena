@@ -195,7 +195,7 @@ class CountryTileMask(context: Context) {
         private const val TAG = "CountryTileMask"
         private const val ASSET_NAME = "europe_country_boundaries.json"
         private const val MASK_MIN_ZOOM = 10
-        const val DEFAULT_BUFFER_KM = 50.0
+        const val DEFAULT_BUFFER_KM = 20.0
         private const val KM_PER_LAT_DEGREE = 110.574
         private const val KM_PER_LON_DEGREE_AT_EQUATOR = 111.320
     }

@@ -691,7 +691,7 @@ class TileDownloadManager(
                 calculateTotalTiles(boundingBox, minZoom, maxZoom, areaId)
 
             // Materialize only the basemap tiles actually needed by this area. Country downloads
-            // use a conservative country+50 km mask at z10-z14; custom viewport downloads retain
+            // use a conservative country+20 km mask at z10-z14; custom viewport downloads retain
             // the exact old rectangular behavior.
             val tileCoordinates =
                 generateTileCoordinates(boundingBox, minZoom, maxZoom, areaId)
@@ -929,8 +929,38 @@ class TileDownloadManager(
         // Read the existing references once, then download a small batch in parallel.
         // File writes are independent; database reference writes stay sequential.
         val existingTiles = loadExistingValhallaTiles(db, areaId)
+        val globalTiles = loadGlobalValhallaTilePaths(db)
         var completedCount = existingTiles.size
-        val pendingTiles = valhallaTiles.filterNot { it in existingTiles }
+        var reusedCount = 0
+
+        val pendingTiles = mutableListOf<Pair<Int, Int>>()
+        for ((hierarchyLevel, tileIndex) in valhallaTiles) {
+            val key = Pair(hierarchyLevel, tileIndex)
+            if (key in existingTiles) continue
+
+            val existingPath = globalTiles[key]
+            if (existingPath != null && File(existingPath).exists()) {
+                storeValhallaTileReference(db, hierarchyLevel, tileIndex, existingPath, areaId)
+                downloadedCount++
+                completedCount++
+                reusedCount++
+            } else {
+                pendingTiles.add(key)
+            }
+        }
+
+        if (reusedCount > 0) {
+            Log.d(TAG, "Reused $reusedCount Valhalla routing tiles from neighbouring offline areas")
+            progressReporter?.updateProgress(
+                areaId = areaId,
+                areaName = areaName,
+                currentStage = DownloadStage.VALHALLA,
+                stageProgress = completedCount,
+                stageTotal = totalValhallaTiles,
+                isCompleted = false,
+                hasError = false
+            )
+        }
 
         for (chunk in pendingTiles.chunked(MAX_CONCURRENT_VALHALLA_DOWNLOADS)) {
             val results = coroutineScope {
@@ -986,6 +1016,22 @@ class TileDownloadManager(
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 result.add(Pair(cursor.getInt(0), cursor.getInt(1)))
+            }
+        }
+        return result
+    }
+
+    private fun loadGlobalValhallaTilePaths(
+        db: SQLiteDatabase
+    ): Map<Pair<Int, Int>, String> {
+        val result = mutableMapOf<Pair<Int, Int>, String>()
+        db.rawQuery(
+            "SELECT hierarchy_level, tile_index, file_path FROM valhalla_tiles",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = Pair(cursor.getInt(0), cursor.getInt(1))
+                result.putIfAbsent(key, cursor.getString(2))
             }
         }
         return result
