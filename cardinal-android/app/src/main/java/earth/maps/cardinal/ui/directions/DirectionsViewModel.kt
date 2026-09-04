@@ -172,7 +172,7 @@ class DirectionsViewModel @Inject constructor(
                 val userLocation = createUserLocation(origin)
 
                 val routes = withContext(Dispatchers.IO) {
-                    ferrostarWrapper.getRoutesWithTrafficFallback(userLocation, waypoints)
+                    ferrostarWrapper.getRoutesWithNearestDestinationFirst(userLocation, waypoints)
                 }
 
                 val accessApproach = routes.routes.firstOrNull()?.let { strictRoute ->

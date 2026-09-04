@@ -183,6 +183,56 @@ class FerrostarWrapper(
         )
     }
 
+    /**
+     * Heavy vehicles first try the exact/nearest destination correlation (Valhalla radius=0).
+     * This prevents our broad legal-edge search radius from pulling a perfectly reachable pin
+     * hundreds of metres back to a larger road.
+     *
+     * Only when that strict nearest-edge request cannot produce a route do we retry with the
+     * normal heavy-vehicle request, where ValhallaRoutingService may add the wider legal-edge
+     * correlation radius. That second pass is what enables the genuine restricted final-approach
+     * fallback.
+     */
+    suspend fun getRoutesWithNearestDestinationFirst(
+        initialLocation: UserLocation,
+        waypoints: List<Waypoint>
+    ): TrafficRouteResult {
+        if ((mode != RoutingMode.TRUCK && mode != RoutingMode.BUS) || waypoints.isEmpty()) {
+            return getRoutesWithTrafficFallback(initialLocation, waypoints)
+        }
+
+        val exactWaypoints = waypoints.mapIndexed { index, waypoint ->
+            if (index == waypoints.lastIndex) {
+                waypoint.withValhallaRadiusZero()
+            } else {
+                waypoint
+            }
+        }
+
+        val exactResult = try {
+            getRoutesWithTrafficFallback(initialLocation, exactWaypoints)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+
+        if (exactResult != null && exactResult.routes.isNotEmpty()) {
+            return exactResult
+        }
+
+        return getRoutesWithTrafficFallback(initialLocation, waypoints)
+    }
+
+    private fun Waypoint.withValhallaRadiusZero(): Waypoint = Waypoint(
+        coordinate = coordinate,
+        kind = kind,
+        // Ferrostar's Valhalla adapter deserializes waypoint properties as JSON. Explicit radius
+        // zero is also important because ValhallaRoutingService only injects its broad radius when
+        // the generated location does not already contain a radius field.
+        properties = """{"radius":0}""".encodeToByteArray()
+    )
+
     suspend fun getRoutesForNavigationRefresh(
         initialLocation: UserLocation,
         waypoints: List<Waypoint>
@@ -333,7 +383,8 @@ class FerrostarWrapper(
                     waypoints = listOf(
                         Waypoint(
                             coordinate = relaxedRoadEnd,
-                            kind = WaypointKind.BREAK
+                            kind = WaypointKind.BREAK,
+                            properties = """{"radius":0}""".encodeToByteArray()
                         )
                     )
                 ).firstOrNull()
