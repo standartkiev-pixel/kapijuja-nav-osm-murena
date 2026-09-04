@@ -40,6 +40,7 @@ data class RouteState(
     val lastTrafficRefreshMs: Long? = null,
     val etaCorrectionFactor: Double = 1.0,
     val rerouteSuggestion: TrafficRerouteSuggestion? = null,
+    val accessApproachRoute: Route? = null,
 )
 
 class RouteStateRepository {
@@ -54,7 +55,8 @@ class RouteStateRepository {
         routes: List<Route>,
         trafficAvailable: Boolean = _routeState.value.isTrafficAvailable,
         lastTrafficRefreshMillis: Long? = _routeState.value.lastTrafficRefreshMs,
-        etaCorrectionFactor: Double = _routeState.value.etaCorrectionFactor
+        etaCorrectionFactor: Double = _routeState.value.etaCorrectionFactor,
+        accessApproachRoute: Route? = null
     ) {
         _routeState.value = _routeState.value.copy(
             routes = routes,
@@ -64,7 +66,8 @@ class RouteStateRepository {
             isTrafficAvailable = trafficAvailable,
             lastTrafficRefreshMs = lastTrafficRefreshMillis,
             etaCorrectionFactor = etaCorrectionFactor,
-            rerouteSuggestion = null
+            rerouteSuggestion = null,
+            accessApproachRoute = accessApproachRoute
         )
     }
 
