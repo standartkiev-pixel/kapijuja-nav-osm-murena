@@ -2,7 +2,9 @@ package earth.maps.cardinal.routing
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,8 +38,9 @@ class TruckTrafficProfileSnapTest {
             """{"costing":"auto_traffic_premium","costing_options":{"auto":{"length":13.5,"width":2.5,"height":4.0,"weight":18.0}}}"""
         ).jsonObject
 
-        assertTrue(
-            shouldApplyHeavyVehicleWaypointRadius(
+        assertEquals(
+            600,
+            heavyVehicleWaypointRadiusMeters(
                 costing = "auto_traffic_premium",
                 requestRoot = request
             )
@@ -50,11 +53,37 @@ class TruckTrafficProfileSnapTest {
             """{"costing":"auto_traffic_premium","costing_options":{"auto":{"use_tolls":0.5}}}"""
         ).jsonObject
 
-        assertFalse(
-            shouldApplyHeavyVehicleWaypointRadius(
+        assertNull(
+            heavyVehicleWaypointRadiusMeters(
                 costing = "auto_traffic_premium",
                 requestRoot = request
             )
         )
     }
+
+    @Test
+    fun `truck stays at 100 metres while bus uses 600 metres`() {
+        val emptyRequest = Json.parseToJsonElement(
+            """{"costing_options":{}}"""
+        ).jsonObject
+
+        assertEquals(100, heavyVehicleWaypointRadiusMeters("truck", emptyRequest))
+        assertEquals(600, heavyVehicleWaypointRadiusMeters("bus", emptyRequest))
+        assertEquals(600, heavyVehicleWaypointRadiusMeters("bus_traffic_premium", emptyRequest))
+    }
+
+    @Test
+    fun `dashed coach fallback keeps exact requested endpoint without snap radius`() {
+        val request = Json.parseToJsonElement(
+            """{"costing":"auto","costing_options":{"auto":{"width":2.5,"height":4.0,"ignore_access":true}}}"""
+        ).jsonObject
+
+        assertNull(
+            heavyVehicleWaypointRadiusMeters(
+                costing = "auto",
+                requestRoot = request
+            )
+        )
+    }
+
 }
