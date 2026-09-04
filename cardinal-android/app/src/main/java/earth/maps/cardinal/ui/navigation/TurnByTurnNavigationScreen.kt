@@ -65,6 +65,7 @@ import com.stadiamaps.ferrostar.maplibreui.views.DynamicallyOrientingNavigationV
 import earth.maps.cardinal.R
 import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.data.formatDuration
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
 import kotlinx.coroutines.delay
 import uniffi.ferrostar.Route
 
