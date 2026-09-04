@@ -298,3 +298,62 @@ The user reported that the offline area he tried did not successfully calculate 
 - `lineBus` is application policy only and is removed from outgoing Valhalla `costing_options`; no invented backend JSON field is used.
 - Current upstream Valhalla OpenAPI documents `bus` as using `AutoCostingOptions`, which include height, width, length and weight.
 - For this first correctness build, live traffic aliases remain enabled only for normal Driving. Truck and Bus use plain `truck` / `bus` or coach `auto` profiles to isolate vehicle/access semantics from the previously observed `truck_traffic` HTTP 400 path.
+
+
+## 2026-09-04 — current functional main, heavy-vehicle routing, traffic, access fallback and country UI
+
+Current canonical main after the critical pass:
+
+- Commit: `de51ac7fd93083914c316510cd449096e4022ae2`
+- GitHub Actions ARM64 run: `33834518093` — **SUCCESS**
+- Artifact: `Kapijuja-Murena-Final-arm64-debug`, ID `9923120947`
+- User report on the current device build: stable in normal use and not crashing.
+
+### Implemented since the earlier online-vehicle patch
+
+- Stable, horizontally scrollable large routing-mode icons.
+- Last selected saved profile remembered per routing mode.
+- Synthetic Default Profile hidden when saved profiles exist; built-in defaults used silently when none exist.
+- Truck wrapper selection fixed in Directions.
+- BUS mode integrated into persistence, editor, Ferrostar wrapper and navigation.
+- Traffic enabled for Auto/Truck/Bus with premium Stadia profile support when the configured key is entitled.
+- Same user-configured Valhalla API key path is used by normal and traffic routing; there is no separate traffic key.
+- User key is no longer required to be embedded in the APK. Advanced Settings has Reset API settings to defaults.
+- Stadia strict integer normalization added for second-based penalty/cost JSON fields.
+- Heavy defaults:
+  - Truck 16.5 x 2.5 x 4.0 m, 45 t, 3 axles.
+  - Bus 13.5 x 2.5 x 4.0 m, 18 t, 3 axles.
+- Narrow-road avoidance strengthened through valid Valhalla preferences/penalties without inventing a lane-count restriction.
+- Truck legal-edge correlation radius remains 100 m.
+- Bus/native Bus traffic/coach-Auto heavy routing uses 600 m legal-edge correlation; normal passenger Auto does not.
+- A separately stored/rendered cautionary final approach is available when strict heavy routing stops short of the requested point.
+- Truck final access fallback remains conservative and short.
+- Bus final approach can extend to 600 m routed distance and tries three tiers:
+  1. access-only relaxation, retaining length/width/height/weight;
+  2. weight relaxed, retaining length/width/height;
+  3. last-resort weight+length relaxed, retaining width+height.
+- The fallback never globally turns on `ignore_restrictions`; one-way and closure handling remain enabled.
+- Preview/navigation uses different dashed colors/styles for fallback risk level and presents a driver warning.
+- Active navigation returns to Guidance after about 15 seconds of no screen interaction.
+- CI debug signing is stable and versionCode increases across builds to support in-place test APK updates.
+- Europe -> country download UI is implemented on top of the existing basemap + Valhalla + offline-geocoder pipeline.
+
+### Important Bus switch follow-up for the next chat
+
+The visible switch is now **Car**:
+- Car ON = Auto/passenger-car access semantics with Bus dimensions.
+- Car OFF = native Valhalla Bus/PSV access semantics.
+
+The persisted compatibility field is still `lineBus`, and the UI uses `Car = !lineBus`.
+
+Current `BusRoutingOptions` still defaults `lineBus=false`, which means the new/in-memory default currently implies **Car ON**. The user explicitly wants the future default Bus to be a real Bus, therefore **Car must be OFF by default**.
+
+Next chat should:
+1. Change only the default for new/built-in Bus options to native Bus / Car OFF.
+2. Preserve already-saved profile values; do not silently invert existing profiles.
+3. Add explanatory UI copy near the switch, e.g. “Car access rules with bus dimensions”.
+4. Keep internal `lineBus` compatibility unless a deliberate data migration is implemented.
+
+### Offline limitation still open
+
+Country downloads currently use country bounding rectangles and the stock offline storage remains area-oriented. Neighboring-country overlap is therefore not yet a finished physical dedup solution. Do not document exact-border or shared-payload dedup as complete until the storage/reference model is changed and tested.

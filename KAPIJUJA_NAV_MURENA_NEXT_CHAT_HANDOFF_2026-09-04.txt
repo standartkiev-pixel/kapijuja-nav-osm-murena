@@ -1,0 +1,589 @@
+KAPIJUJA NAV / MURENA — NEXT CHAT HANDOFF
+DATE: 2026-09-04
+
+==================================================
+1. CANONICAL REPOSITORY — DO NOT SWITCH REPOS
+==================================================
+
+ONLY CANONICAL REPOSITORY:
+standartkiev-pixel/kapijuja-nav-osm-murena
+
+CANONICAL BRANCH:
+main
+
+CURRENT MAIN / WORKING STATE:
+de51ac7fd93083914c316510cd449096e4022ae2
+
+The former working branch critical-pass-2026-09-03 is currently at the same commit. Do not restart the project from older TomTom/Kapijuja repositories. Those may be read only as historical references.
+
+CURRENT GREEN BUILD:
+GitHub Actions run 33834518093 — SUCCESS
+
+ARM64 ARTIFACT:
+Kapijuja-Murena-Final-arm64-debug
+artifact ID 9923120947
+
+User report as of this handoff:
+the current variant works well on the real device, does not crash, and is considered the stable point from which the next chat must continue.
+
+==================================================
+2. UPSTREAM PROVENANCE / WHERE THE CODE CAME FROM
+==================================================
+
+Official Murena Maps/Cardinal upstream:
+https://gitlab.e.foundation/e/os/maps
+
+Pinned imported upstream commit:
+f9a061aff58ec7f11dc7fa19bd0138720fc99b01
+
+Upstream commit time:
+2026-09-03T15:21:13Z
+
+Upstream subject:
+Translated using Weblate (Portuguese (Brazil))
+
+Kapijuja clean import commit:
+0adf78dd4801e71494f1dc5001734589dc025069
+
+Golden clean stock build before functional modifications:
+commit 1b5cbefb81b8cf5055fc769028bdc310b9aaf9e5
+run 33774447697
+APK SHA-256:
+2f51565267081910e3d2720e89570041dddf623b0bed8e308a646524e306362f
+
+Keep the clean Murena behavior as the regression baseline.
+
+==================================================
+3. ARCHITECTURE / DEVELOPMENT RULE
+==================================================
+
+Android:
+- Kotlin
+- Jetpack Compose
+- MVVM
+- Hilt
+- Room
+- Java 17
+- compileSdk 37
+- targetSdk 36
+- minSdk 26
+
+Navigation/map stack:
+- MapLibre: rendering
+- Ferrostar: turn-by-turn navigation, navigation controller, route instructions
+- Valhalla: routing
+- Pelias/upstream online search path where configured
+- Rust/UniFFI geocoder: offline/local geocoding
+- OpenStreetMap-derived map/routing graph data through the Murena pipeline
+
+IMPORTANT ENGINEERING RULE:
+Prefer the highest safe layer:
+DirectionsViewModel, RoutingOptions, repositories, profile editor, request building, UI state.
+
+Do NOT modify MapLibre, Ferrostar internals, native Valhalla, or Rust geocoder unless there is concrete evidence that the high-level layer cannot solve the problem.
+
+The stock Murena navigation already worked very well:
+map, GPS, car routing, TBT, maneuver arrows, ETA, rerouting, TTS, profile UI, favorites.
+Do not damage those functions.
+
+Read before editing:
+- README.md
+- KAPIJUJA_PROJECT_LOG.md
+- cardinal-android/AGENTS.md
+- KAPIJUJA_CRITICAL_PASS_CHECKPOINT_2026-09-03_2335.md
+
+==================================================
+4. BUILD / SIGNING / UPDATE INSTALL
+==================================================
+
+Workflow:
+.github/workflows/build-stock-murena-apk.yml
+
+The CI build follows Murena's Android/Rust environment and generates Rust/UniFFI before the Android build.
+
+A stable Kapijuja CI debug signing keystore is used for the .debug application and GitHub run data is used for a monotonically increasing versionCode.
+
+Why this matters:
+older CI runs could use an ephemeral Android debug key, so Android refused to install a new APK as an update over an old one even though a clean install worked.
+
+One clean install can be required when migrating away from the old ephemeral signature. After that, builds signed by the stable Kapijuja debug key should update in place.
+
+Do not mix the debug signing identity with a future release signing identity.
+
+==================================================
+5. API KEYS / STADIA / TRAFFIC
+==================================================
+
+The APK should NOT require the private project Stadia key compiled into the binary.
+
+Advanced Settings exposes Valhalla/Pelias URL + key configuration.
+
+Behavior:
+- fresh/default install uses the upstream no-key defaults;
+- user may enter a Stadia key manually;
+- entering the Stadia key selects the Stadia endpoint where appropriate;
+- Reset API settings to defaults removes user URL/key overrides and returns to the fresh-install no-key defaults.
+
+The same configured Valhalla key path is used for ordinary routing and traffic routing. There is no separate traffic key.
+
+The real project key was safely tested in GitHub Actions without printing it.
+
+Confirmed accepted premium profiles:
+- auto_traffic_premium -> HTTP 200
+- bus_traffic_premium -> HTTP 200
+- truck_traffic_premium -> HTTP 200 on a known routable Truck segment
+
+Traffic requests use current-departure semantics.
+
+Traffic fallback:
+if an eligible hosted traffic profile is rejected as unsupported/unauthorized, routing can retry the corresponding non-traffic profile instead of failing the entire route.
+
+Closures:
+ignore_closures is not enabled by default. Existing backend/graph closure information is intended to be respected.
+
+NOT IMPLEMENTED YET:
+country-specific EU National Access Point / NAP closure adapters. That is future work.
+
+==================================================
+6. TRUCK ROUTING
+==================================================
+
+The original stock bug:
+DirectionsViewModel sent RoutingMode.TRUCK to ordinary Driving because the mode selector fell through to the default driving wrapper.
+
+Fixed:
+Truck now uses the dedicated Truck Ferrostar wrapper and Truck Valhalla costing.
+
+Built-in Truck defaults:
+- length 16.5 m
+- width 2.5 m
+- height 4.0 m
+- weight 45 t
+- axle count 3
+- use_truck_route 1.0
+- use_highways 0.8
+- use_living_streets 0.0
+- use_tracks 0.0
+- avoid unpaved
+- service/low-class penalties
+- closures/restrictions/oneways/access not globally ignored
+
+Truck destination correlation:
+100 m legal-edge candidate radius.
+
+Reason:
+a destination coordinate can lie on the nearest road edge that is forbidden to Truck. The 100 m correlation radius lets Valhalla choose a nearby legal Truck edge instead of returning NoRoute.
+
+Truck cautionary final approach:
+kept conservative, roughly max 120 m actual routed distance.
+
+Do not globally set ignore_restrictions for Truck.
+
+==================================================
+7. BUS / COACH ROUTING
+==================================================
+
+RoutingMode.BUS has been added through the normal architecture:
+- RoutingMode
+- RoutingProfile persistence/deserialization
+- RoutingOptions
+- Ferrostar wrapper/repository
+- Valhalla costing profile
+- Directions selector
+- Profile Editor
+- Turn-by-turn wrapper/navigation
+
+Built-in Bus/coach defaults:
+- length 13.5 m
+- width 2.5 m
+- height 4.0 m
+- weight 18 t
+- axle count 3
+- use_highways 0.8
+- use_living_streets 0.0
+- use_tracks 0.0
+- avoid unpaved
+- service penalty/factor
+- alley factor
+- closures/restrictions/oneways not globally ignored
+
+Bus axle count is stored/displayed in the profile, but is removed from current Auto/Bus Valhalla JSON because that costing schema does not accept Truck-style axle_count.
+
+==================================================
+8. VERY IMPORTANT: CURRENT CAR SWITCH SEMANTICS
+==================================================
+
+The old visible “Line Bus” switch was changed to “Car”.
+
+CURRENT SEMANTICS:
+Car ON:
+- use Valhalla AUTO / passenger-car access semantics
+- RETAIN Bus physical dimensions/weight in costing options
+
+Car OFF:
+- use native Valhalla BUS / PSV access semantics
+
+Internal persisted field:
+lineBus
+
+UI mapping:
+Car = !lineBus
+
+This internal field name is retained for saved-profile compatibility.
+
+IMPORTANT NEXT-CHAT TASK:
+The user wants a NEW/DEFAULT Bus to be a real Bus.
+
+Therefore:
+DEFAULT MUST BE:
+Car OFF
+native BUS semantics
+
+CURRENT CODE PROBLEM:
+BusRoutingOptions currently initializes lineBus=false.
+Because Car = !lineBus, that means a new default Bus currently implies Car ON.
+
+NEXT CHAT MUST FIX THIS CAREFULLY:
+1. Set the NEW/BUILT-IN Bus default so native BUS is selected and Car is OFF.
+   The simplest direction is to make the new default lineBus=true, but check every creation path before changing it.
+2. DO NOT silently invert existing stored profile values.
+3. Existing saved profiles must retain the user's previous selection.
+4. Add helper text under/near the switch:
+   “Car access rules with bus dimensions”
+   or equivalent.
+5. Do not rename/migrate lineBus unless a deliberate Room/profile migration is implemented and tested.
+
+This is the most important immediate UX correction for the next chat.
+
+==================================================
+9. BUS 600 M LEGAL-EDGE SEARCH
+==================================================
+
+Truck stays at:
+100 m
+
+Bus/native Bus traffic/coach-Car heavy profile:
+600 m
+
+Normal passenger Auto:
+NO heavy-vehicle 600 m radius.
+
+Coach-Car is detected as AUTO-family costing carrying heavy vehicle dimensions.
+
+Important exception:
+the separately calculated dashed access fallback itself does NOT receive the 600 m endpoint snap, because its destination must remain the user's exact requested point.
+
+==================================================
+10. DASHED FINAL APPROACH — CURRENT BUS LOGIC
+==================================================
+
+Main route:
+always try the strict Truck/Bus/Coach profile first.
+
+If strict routing reaches only a nearby legal heavy-vehicle edge and the exact destination requires a cautionary approach, build a second final-approach route.
+
+Bus final approach max:
+600 m ACTUAL ROUTED DISTANCE.
+
+Not just straight-line distance.
+
+The Bus fallback is tiered.
+
+TIER 1 — YELLOW DASHED
+ACCESS_ONLY
+
+- AUTO access semantics
+- ignore_access=true
+- configured length retained
+- configured width retained
+- configured height retained
+- configured weight retained
+- ignore_restrictions=false
+- ignore_oneways=false
+- ignore_closures=false
+
+This is the preferred fallback.
+
+TIER 2 — ORANGE DASHED
+WEIGHT_RELAXED
+
+Only if Tier 1 cannot route.
+
+- access restriction softened as above
+- effective weight set to 0.0 for restriction matching
+- length retained
+- width retained
+- height retained
+- one-way and closure logic retained
+- ignore_restrictions still false
+
+Purpose:
+some city-center roads can have map weight restrictions that do not reflect practical local/coach access.
+
+TIER 3 — RED DASHED
+WEIGHT_AND_LENGTH_RELAXED
+
+Only if Tier 1 and Tier 2 both fail.
+
+- effective weight = 0.0
+- effective length = 0.0
+- REAL width retained
+- REAL height retained
+- one-way retained
+- closures retained
+- ignore_restrictions=false
+
+Purpose:
+last-resort city-center approach where mapped max-length (for example 7.5 m) would otherwise block a real full-size coach route.
+
+NEVER relax:
+- width
+- height
+
+Those must remain real Bus dimensions in every fallback tier.
+
+The user explicitly wants the driver to make the final visual judgment on the street when the route is shown as cautionary dashed access.
+
+==================================================
+11. DASHED APPROACH UI
+==================================================
+
+The access approach is stored separately from the strict route and carried through:
+- RouteStateRepository
+- Directions
+- RouteRepository
+- AppContent state
+- route preview map
+- turn-by-turn map
+
+Risk visualization:
+- yellow dashed = access-only relaxation
+- orange dashed = weight relaxed
+- red dashed = weight + length relaxed
+
+The UI also shows a driver warning describing which relaxation was used.
+
+Do not render these segments as an ordinary guaranteed-safe Bus route.
+
+Current limitation to remember:
+the dashed approach is a separately calculated route/overlay. If future testing shows that the last 50-600 m need full independent spoken maneuver/TTS state-machine guidance, that is a separate enhancement. Do not assume it is already equivalent to the primary Ferrostar route state.
+
+==================================================
+12. NARROW RESIDENTIAL ROADS
+==================================================
+
+Observed problem:
+Valhalla can choose a residential road through a housing estate even when a nearby wide arterial is much more suitable for a 13.5 m coach.
+
+Current mitigations:
+Truck:
+- use_truck_route
+- low_class_penalty
+- service penalties
+- highway preference
+- living-street/track avoidance
+
+Bus/Coach:
+- service penalty/factor
+- alley factor
+- highway preference
+- living-street/track avoidance
+- maneuver penalty
+- real dimensions
+
+Do NOT invent a fake lanes>=2 Valhalla parameter. There is no clean standard option for that in the current costing.
+
+If the real-device route is still bad:
+inspect the exact OSM tags of that road first.
+Parked cars and swept-path turning geometry are not automatically known to Valhalla unless represented by map data/restrictions/incidents.
+
+==================================================
+13. PROFILE UX
+==================================================
+
+Implemented:
+- routing-mode icons are large
+- horizontally scrollable instead of compressed
+- selected saved profile remembered per routing mode
+- multiple saved profiles supported
+- if saved profiles exist, synthetic “Default Profile” is not shown
+- if no saved profile exists, built-in defaults are used silently
+
+The previous confusing state where Bus showed both “Bus” and “Default Profile” and then jumped back to Default has been addressed at the profile-selection layer.
+
+==================================================
+14. RETURN TO GUIDANCE
+==================================================
+
+TomTom-like behavior added:
+
+When an active navigation route exists and the driver manually browses/moves the map:
+- interaction suspends/resets the countdown
+- after about 15 seconds without interaction the map returns to the normal Guidance/tracking camera
+
+Without an active route:
+no forced recenter.
+
+==================================================
+15. STADIA JSON SCHEMA FIX
+==================================================
+
+Real hosted Stadia diagnostics found that some second-based routing penalties/costs must be JSON integers.
+
+Example:
+300.0 could be rejected where 300 is accepted.
+
+RoutingOptions.toValhallaOptionsJson() now normalizes known second-based costs/penalties to JSON integer values at the API boundary.
+
+Do NOT round:
+vehicle length, width, height or weight as part of this integer-cost normalization.
+
+==================================================
+16. OFFLINE ROUTING / COUNTRY DOWNLOADS
+==================================================
+
+End-state principle:
+offline-first navigation.
+
+After the correct map/routing data is downloaded, local Valhalla routing does not need a hosted routing API key for every route.
+
+Current country UI:
+Offline Areas
+-> Europe
+-> country
+-> Download entire country
+
+Current catalog file:
+cardinal-android/app/src/main/java/earth/maps/cardinal/data/EuropeanCountryDownloads.kt
+
+Current implementation uses practical country BOUNDING RECTANGLES.
+
+A country download is passed into the existing Murena pipeline, whose stages are:
+1. basemap
+2. Valhalla routing tiles
+3. offline geocoder processing
+
+The old current-viewport downloader remains as a secondary tool.
+
+IMPORTANT: NOT FINISHED
+- exact country polygons
+- physical shared-tile dedup across neighboring countries
+- shared reference counting for overlapping country payloads
+- large/non-contiguous country optimization
+
+The current MBTiles/Valhalla bookkeeping is still area-oriented, so do not claim overlap dedup is complete merely because the same geographic tiles overlap.
+
+Future priority after heavy-vehicle testing:
+make shared tiles physically unique while allowing multiple country/area references.
+
+==================================================
+17. LIVE TRAFFIC / CLOSED ROADS — CURRENT LIMIT
+==================================================
+
+Stadia premium traffic is verified for Auto/Bus/Truck with the configured key.
+
+Valhalla itself consumes traffic/closure data supplied by its backend/graph data.
+
+The project has NOT yet implemented direct adapters to each EU country's official NAP/road-closure feed.
+
+Long-term intended architecture:
+- base map + Bus/Truck routing local/offline
+- small online layer for fresh traffic/incident/closure data
+- routing must remain usable when that online layer is unavailable
+
+==================================================
+18. LANE GUIDANCE
+==================================================
+
+Ferrostar route instructions can carry lane information, but the stock phone Compose UI used here does not currently render a full lane-board graphic like a dedicated automotive UI.
+
+The user explicitly said not to force this into the current critical build if it is not already available.
+
+Treat detailed lane graphics as a separate future UI feature.
+
+==================================================
+19. CURRENT STABILITY / DO NOT BREAK
+==================================================
+
+The current main build is user-reported stable and not crashing.
+
+Preserve:
+- map rendering
+- GPS
+- normal car routing
+- Truck routing
+- Bus routing
+- navigation map
+- rerouting
+- maneuver arrows
+- TTS
+- saved profiles
+- favorites
+- current Settings
+- offline-area base behavior
+
+Before any risky modification:
+1. reproduce the need;
+2. change the highest safe layer;
+3. add/adjust focused tests;
+4. get a green ARM64 GitHub Actions build;
+5. then test on the real Samsung device.
+
+==================================================
+20. FILES MOST RELEVANT TO NEXT WORK
+==================================================
+
+Routing/profile:
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RoutingOptions.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/FerrostarWrapper.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/ValhallaRoutingService.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/HeavyVehicleAccessApproach.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/RouteRepository.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/data/RouteStateRepository.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/data/room/RoutingProfileRepository.kt
+
+UI:
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/settings/ProfileEditorScreen.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/directions/DirectionsViewModel.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/directions/DirectionsScreen.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/core/MapView.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/navigation/TrafficRouteOverlay.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/navigation/TurnByTurnNavigationScreen.kt
+
+Offline:
+cardinal-android/app/src/main/java/earth/maps/cardinal/data/EuropeanCountryDownloads.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/ui/home/OfflineAreasScreen.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/tileserver/TileDownloadManager.kt
+cardinal-android/app/src/main/java/earth/maps/cardinal/routing/OfflineRoutingService.kt
+
+Build:
+.github/workflows/build-stock-murena-apk.yml
+
+==================================================
+21. FIRST TASK FOR NEXT CHAT
+==================================================
+
+FIRST:
+Do NOT redesign routing.
+
+Fix the Bus default/label semantics only:
+
+A. NEW/default Bus = native BUS
+B. Car switch default = OFF
+C. Car ON means:
+   passenger-car access rules with Bus dimensions/weight retained
+D. Existing saved profile values must remain unchanged
+E. Add a clear explanatory subtitle to the Car switch
+
+Then:
+build once, verify green CI, test on device.
+
+After that continue with:
+- narrow-road real-world tests
+- offline country dedup/polygon work
+- optional dashed-access TTS integration if actually needed
+- later NAP/closure integrations
+
+==================================================
+END OF HANDOFF
+==================================================
