@@ -73,6 +73,7 @@ class TileDownloadForegroundService : Service() {
     private var downloadJob: Job? = null
 
     private val _downloadProgress: MutableStateFlow<DownloadProgress?> = MutableStateFlow(null)
+    val downloadProgress: StateFlow<DownloadProgress?> = _downloadProgress.asStateFlow()
 
     private val _isDownloading = MutableStateFlow(false)
     val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
@@ -406,7 +407,7 @@ class TileDownloadForegroundService : Service() {
         if (area != null) {
             val updatedArea = area.copy(
                 status = if (success) DownloadStatus.PROCESSING_GEOCODER else DownloadStatus.FAILED,
-                fileSize = fileSize
+                fileSize = if (fileSize > 0L) fileSize else area.fileSize
             )
             offlineAreaDao.updateOfflineArea(updatedArea)
         }
@@ -526,6 +527,24 @@ class TileDownloadForegroundService : Service() {
     fun startDownload(boundingBox: BoundingBox, minZoom: Int, maxZoom: Int, areaName: String) {
         val areaId = UUID.randomUUID().toString()
         tileDownloadManager.downloadTiles(boundingBox, minZoom, maxZoom, areaId, areaName)
+    }
+
+    fun retryDownload(areaId: String) {
+        serviceScope.launch {
+            val area = offlineAreaDao.getOfflineAreaById(areaId) ?: return@launch
+            val retryArea = area.copy(
+                status = DownloadStatus.DOWNLOADING_BASEMAP,
+                paused = false
+            )
+            offlineAreaDao.updateOfflineArea(retryArea)
+            tileDownloadManager.downloadTiles(
+                retryArea.boundingBox(),
+                retryArea.minZoom,
+                retryArea.maxZoom,
+                retryArea.id,
+                retryArea.name
+            )
+        }
     }
 
     fun startCountryDownload(

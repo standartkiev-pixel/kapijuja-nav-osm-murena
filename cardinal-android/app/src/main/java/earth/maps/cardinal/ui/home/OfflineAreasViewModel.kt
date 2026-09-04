@@ -42,6 +42,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.min
@@ -59,6 +60,7 @@ class OfflineAreasViewModel @Inject constructor(
     val downloadProgress = mutableIntStateOf(0)
     val totalTiles = mutableIntStateOf(0)
     val currentAreaName = mutableStateOf("")
+    val currentAreaId = mutableStateOf("")
 
     // New unified progress properties
     val unifiedProgress = mutableFloatStateOf(0f) // 0.0 to 1.0
@@ -113,16 +115,28 @@ class OfflineAreasViewModel @Inject constructor(
      * Called when ViewModel is created to sync with any ongoing downloads
      */
     private fun syncWithOngoingDownloads() {
-        viewModelScope.launch {
-            // Give service binding a moment to establish
-            delay(500)
+        progressJob?.cancel()
+        progressJob = viewModelScope.launch {
+            delay(100)
+            val service = serviceBinder?.getService() ?: return@launch
 
-            if (isBound && serviceBinder != null) {
-                val service = serviceBinder!!.getService()
-                // Check if service is currently downloading
-                val isServiceDownloading = service.isDownloading.value
-                if (isServiceDownloading) {
-                    // The StateFlow observations should handle the rest
+            combine(
+                service.downloadProgress,
+                service.isDownloading,
+                service.isPaused
+            ) { progress, downloading, paused ->
+                Triple(progress, downloading, paused)
+            }.collect { (progress, downloading, paused) ->
+                isDownloading.value = downloading
+                isPaused.value = paused
+
+                if (progress != null) {
+                    currentAreaId.value = progress.areaId
+                    currentAreaName.value = progress.areaName
+                    downloadProgress.intValue = progress.stageProgress
+                    totalTiles.intValue = progress.stageTotal
+                    unifiedProgress.floatValue = progress.unifiedProgress
+                    currentStage.value = progress.currentStage
                 }
             }
         }
@@ -170,6 +184,10 @@ class OfflineAreasViewModel @Inject constructor(
                 fullMap
             )
         }
+    }
+
+    fun retryOfflineArea(offlineArea: OfflineArea) {
+        serviceBinder?.getService()?.retryDownload(offlineArea.id)
     }
 
     fun deleteOfflineArea(offlineArea: OfflineArea) {
@@ -248,6 +266,7 @@ class OfflineAreasViewModel @Inject constructor(
            downloadProgress.intValue = 0
            totalTiles.intValue = 0
            currentAreaName.value = ""
+           currentAreaId.value = ""
        }
     }
 

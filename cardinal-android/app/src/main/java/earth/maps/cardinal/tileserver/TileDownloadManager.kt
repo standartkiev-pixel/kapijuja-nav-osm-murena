@@ -294,6 +294,7 @@ class TileDownloadManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading tiles for area $name (ID: $areaId)", e)
             handleDownloadError(areaId, name)
+            throw e
         } finally {
             closeDatabaseSafely(db)
         }
@@ -659,7 +660,11 @@ class TileDownloadManager(
         // Update offline area status
         val area = offlineAreaDao.getOfflineAreaById(areaId)
         if (area != null) {
-            val updatedArea = area.copy(status = DownloadStatus.FAILED, fileSize = 0L)
+            val storedBytes = File(context.filesDir, OFFLINE_DATABASE_NAME).length()
+            val updatedArea = area.copy(
+                status = DownloadStatus.FAILED,
+                fileSize = maxOf(area.fileSize, storedBytes)
+            )
             offlineAreaDao.updateOfflineArea(updatedArea)
         }
     }
@@ -792,23 +797,92 @@ class TileDownloadManager(
                     areaId = areaId,
                     areaName = areaName,
                     currentStage = DownloadStage.BASEMAP,
-                    stageProgress = downloadedCount.get(),
-                    stageTotal = remainingTiles,
+                    stageProgress = successfulTileIds.size,
+                    stageTotal = totalTiles,
                     isCompleted = false,
                     hasError = false
                 )
             }
 
-            // Final consistency check
+            // Retry only unresolved tiles in the same download session. A single transient
+            // HTTP failure must not invalidate a country after thousands of successful tiles.
+            var retryPass = 1
+            while (retryPass < MAX_RETRY_COUNT) {
+                val unresolved = tileCoordinates.filter { (zoom, x, y) ->
+                    "basemap_${areaId}_${zoom}_${x}_${y}" !in successfulTileIds
+                }
+                if (unresolved.isEmpty()) break
+
+                retryPass++
+                Log.w(
+                    TAG,
+                    "Retry pass $retryPass/$MAX_RETRY_COUNT for ${unresolved.size} unresolved basemap tiles in $areaId"
+                )
+                delay(400L * (retryPass - 1))
+
+                for (chunk in unresolved.chunked(MAX_CONCURRENT_DOWNLOADS)) {
+                    val retryFailures = AtomicInteger(0)
+                    val tileData = processBatch(
+                        chunk,
+                        areaId,
+                        areaName,
+                        totalTiles,
+                        downloadedCount,
+                        retryFailures,
+                        successfulTileIds,
+                        failedTileIds
+                    )
+
+                    if (tileData.isNotEmpty()) {
+                        batchInsertTiles(db, tileData, areaId)
+                        val successRecords = tileData.map { (zoom, coords, _) ->
+                            val (x, y) = coords
+                            DownloadedTile(
+                                id = "basemap_${areaId}_${zoom}_${x}_${y}",
+                                areaId = areaId,
+                                tileType = TileType.BASEMAP,
+                                downloadTimestamp = System.currentTimeMillis(),
+                                retryCount = 0,
+                                zoom = zoom,
+                                tileX = x,
+                                tileY = y,
+                                processed = false,
+                                hierarchyLevel = null,
+                                tileIndex = null
+                            )
+                        }
+                        downloadedTileDao.insertDownloadedTiles(successRecords)
+                        for (record in successRecords) {
+                            successfulTileIds.add(record.id)
+                            failedTileIds.remove(record.id)
+                        }
+                        downloadedCount.addAndGet(successRecords.size)
+                    }
+
+                    progressReporter?.updateProgress(
+                        areaId = areaId,
+                        areaName = areaName,
+                        currentStage = DownloadStage.BASEMAP,
+                        stageProgress = successfulTileIds.size,
+                        stageTotal = totalTiles,
+                        isCompleted = false,
+                        hasError = false
+                    )
+                }
+            }
+
+            // Only tiles still missing after all attempts count as failures. Earlier transient
+            // failures that later succeeded must not poison the whole country result.
             val finalDownloadedCount = downloadedCount.get()
             val finalExistingTileCount =
                 downloadedTileDao.getDownloadedTileCountForAreaAndType(areaId, TileType.BASEMAP)
+            val unresolvedCount = maxOf(0, totalTiles - finalExistingTileCount)
             Log.d(
                 TAG,
-                "Downloaded $finalDownloadedCount new tiles, total for area: $finalExistingTileCount"
+                "Downloaded $finalDownloadedCount new tiles, total for area: $finalExistingTileCount, unresolved: $unresolvedCount"
             )
 
-            return Pair(finalDownloadedCount, failedCount.get())
+            return Pair(finalDownloadedCount, unresolvedCount)
         } finally {
             // Close database
             try {

@@ -68,6 +68,7 @@ import earth.maps.cardinal.data.EuropeanCountryDownloadRegion
 import earth.maps.cardinal.data.EuropeanCountryDownloads
 import earth.maps.cardinal.data.room.DownloadStatus
 import earth.maps.cardinal.data.room.OfflineArea
+import earth.maps.cardinal.tileserver.DownloadStage
 import kotlinx.coroutines.launch
 import org.maplibre.compose.util.VisibleRegion
 import java.text.SimpleDateFormat
@@ -220,14 +221,24 @@ fun OfflineAreasScreen(
         } else {
             LazyColumn {
                 items(offlineAreas) { area ->
+                    val isActiveDownload =
+                        area.id == viewModel.currentAreaId.value && isDownloading
                     OfflineAreaItem(
-                        area = area, dateFormat = dateFormat, onDeleteClick = {
+                        area = area,
+                        dateFormat = dateFormat,
+                        onDeleteClick = {
                             areaToDelete = area
                             showDeleteDialog = true
-                        }, onSelected = {
+                        },
+                        onRetryClick = { viewModel.retryOfflineArea(area) },
+                        onSelected = {
                             selectedArea = area
                             onAreaSelected(area)
-                        }, isSelected = selectedArea?.id == area.id
+                        },
+                        isSelected = selectedArea?.id == area.id,
+                        activeStage = if (isActiveDownload) viewModel.currentStage.value else null,
+                        activeProgress = if (isActiveDownload) viewModel.downloadProgress.intValue else 0,
+                        activeTotal = if (isActiveDownload) viewModel.totalTiles.intValue else 0
                     )
                 }
             }
@@ -284,8 +295,12 @@ fun OfflineAreaItem(
     area: OfflineArea,
     dateFormat: SimpleDateFormat,
     onDeleteClick: () -> Unit,
+    onRetryClick: () -> Unit,
     onSelected: () -> Unit,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    activeStage: DownloadStage? = null,
+    activeProgress: Int = 0,
+    activeTotal: Int = 0
 ) {
     Card(
         modifier = Modifier
@@ -324,6 +339,11 @@ fun OfflineAreaItem(
                             enabled = false
                         )
                     }
+                    if (area.status == DownloadStatus.FAILED) {
+                        TextButton(onClick = onRetryClick) {
+                            Text("Retry")
+                        }
+                    }
                     IconButton(onClick = onDeleteClick) {
                         Icon(
                             painter = painterResource(drawable.ic_delete),
@@ -349,6 +369,22 @@ fun OfflineAreaItem(
                 modifier = Modifier.padding(top = 4.dp)
             )
 
+            if (activeStage != null && activeTotal > 0) {
+                val liveLabel = when (activeStage) {
+                    DownloadStage.BASEMAP -> "Map"
+                    DownloadStage.VALHALLA -> "Routing"
+                    DownloadStage.PROCESSING -> "Processing"
+                    DownloadStage.DONE -> "Done"
+                    DownloadStage.ERROR -> "Error"
+                }
+                Text(
+                    text = "$liveLabel: $activeProgress / $activeTotal",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
             // Date
             val dateString = dateFormat.format(Date(area.downloadDate))
             Text(
@@ -365,7 +401,11 @@ fun OfflineAreaItem(
             )
 
             // File size
-            val fileSizeText = formatFileSize(area.fileSize)
+            val fileSizeText = if (activeStage != null && area.fileSize == 0L) {
+                "writing…"
+            } else {
+                formatFileSize(area.fileSize)
+            }
             Text(
                 text = stringResource(R.string.file_size, fileSizeText),
                 style = MaterialTheme.typography.bodySmall,
