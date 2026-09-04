@@ -604,6 +604,14 @@ class TileDownloadManager(
         Log.d(TAG, "Starting tile processing phase for area $areaId")
         processDownloadedTiles(areaId)
 
+        val remainingAfterProcessing =
+            downloadedTileDao.getUnprocessedTileCountForArea(areaId)
+        if (remainingAfterProcessing > 0) {
+            throw IllegalStateException(
+                "Offline geocoder incomplete: $remainingAfterProcessing tiles remain"
+            )
+        }
+
         // Update offline area status to COMPLETED
         val completedArea = offlineAreaDao.getOfflineAreaById(areaId)
         if (completedArea != null) {
