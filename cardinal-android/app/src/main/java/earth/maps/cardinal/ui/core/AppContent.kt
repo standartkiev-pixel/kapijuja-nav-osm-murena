@@ -488,7 +488,7 @@ private fun MapViewContainer(
                 allRoutes = state.allRoutes,
                 trafficAvailable = state.trafficAvailable,
                 etaCorrectionFactor = state.etaCorrectionFactor,
-                accessApproachRoute = state.accessApproachRoute,
+                accessApproach = state.accessApproach,
                 currentTransitItinerary = state.currentTransitItinerary,
                 highlightedTransitLegIndex = state.highlightedTransitLegIndex,
                 onRouteAnnotationClick = { routeIndex ->
@@ -543,7 +543,7 @@ private fun HomeRoute(
         state.mapPins.clear()
         state.currentRoute = null
         state.allRoutes = emptyList()
-        state.accessApproachRoute = null
+        state.accessApproach = null
     }
     state.showToolbar = true
     HomeScreenComposable(
@@ -1125,9 +1125,9 @@ private fun TurnByTurnRoute(
             null
         }
     }
-    val accessApproachRoute = route.routeId.let {
+    val accessApproach = route.routeId.let {
         try {
-            routeRepository.getAccessApproachRoute(it)
+            routeRepository.getAccessApproach(it)
         } catch (_: Exception) {
             null
         }
@@ -1138,7 +1138,7 @@ private fun TurnByTurnRoute(
             port = port,
             mode = route.routingMode,
             route = ferrostarRoute,
-            accessApproachRoute = accessApproachRoute,
+            accessApproach = accessApproach,
             useDarkTheme = useDarkTheme,
         )
     }
