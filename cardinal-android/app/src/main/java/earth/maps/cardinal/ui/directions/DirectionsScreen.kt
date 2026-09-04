@@ -690,7 +690,7 @@ fun RouteDisplayHandler(
     cameraState: org.maplibre.compose.camera.CameraState,
     appPreferences: AppPreferenceRepository,
     padding: PaddingValues,
-    onRouteUpdate: (Route?, List<Route>, Boolean, Double) -> Unit
+    onRouteUpdate: (Route?, List<Route>, Boolean, Double, Route?) -> Unit
 ) {
     val routeState by viewModel.routeState.collectAsState()
     val selectedRoute = routeState.routes.getOrNull(routeState.selectedRouteIndex ?: 0)
@@ -708,7 +708,8 @@ fun RouteDisplayHandler(
                 selectedRoute,
                 routeState.routes,
                 routeState.isTrafficAvailable,
-                routeState.etaCorrectionFactor
+                routeState.etaCorrectionFactor,
+                routeState.accessApproachRoute
             )
             selectedRoute?.let { route ->
                 val coordinates = route.geometry
@@ -732,7 +733,7 @@ fun RouteDisplayHandler(
                 }
             }
         } else {
-            onRouteUpdate(null, emptyList(), false, 1.0)
+            onRouteUpdate(null, emptyList(), false, 1.0, null)
         }
     }
 }
