@@ -25,6 +25,8 @@ import com.maplibre.compose.ramani.MapLibreComposable
 import com.maplibre.compose.symbols.Polyline
 import com.maplibre.compose.symbols.Symbol
 import earth.maps.cardinal.R
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
+import earth.maps.cardinal.routing.HeavyVehicleAccessRelaxation
 import earth.maps.cardinal.routing.TrafficRouteSegments
 import earth.maps.cardinal.routing.TrafficSegmentUi
 import earth.maps.cardinal.routing.navigationHexColor
@@ -46,7 +48,7 @@ fun TrafficRouteMapOverlay(
     route: Route?,
     remainingSteps: List<RouteStep>?,
     trafficAvailable: Boolean,
-    accessApproachRoute: Route? = null,
+    accessApproach: HeavyVehicleAccessApproach? = null,
 ) {
     val trafficSegments = remember(route, remainingSteps, trafficAvailable) {
         val currentSteps = remainingSteps.orEmpty()
@@ -71,12 +73,16 @@ fun TrafficRouteMapOverlay(
         )
     }
 
-    val accessDashSegments = remember(accessApproachRoute) {
-        accessApproachRoute?.geometry
+    val accessDashSegments = remember(accessApproach) {
+        accessApproach?.route?.geometry
             ?.takeIf { it.size >= 2 }
-            ?.toFixedDashSegments()
+            ?.toFixedDashSegments(
+                dashMeters = accessApproach.relaxation.navigationStyle().dashMeters,
+                gapMeters = accessApproach.relaxation.navigationStyle().gapMeters
+            )
             .orEmpty()
     }
+    val accessStyle = accessApproach?.relaxation?.navigationStyle()
     accessDashSegments.forEach { dash ->
         Polyline(
             points = dash.map { it.toMapLibreLatLng() },
@@ -85,16 +91,18 @@ fun TrafficRouteMapOverlay(
             zIndex = ACCESS_APPROACH_Z_INDEX
         )
     }
-    accessDashSegments.forEach { dash ->
-        Polyline(
-            points = dash.map { it.toMapLibreLatLng() },
-            color = ACCESS_APPROACH_COLOR,
-            lineWidth = ACCESS_APPROACH_LINE_WIDTH,
-            zIndex = ACCESS_APPROACH_Z_INDEX + 1
-        )
+    if (accessStyle != null) {
+        accessDashSegments.forEach { dash ->
+            Polyline(
+                points = dash.map { it.toMapLibreLatLng() },
+                color = accessStyle.color,
+                lineWidth = ACCESS_APPROACH_LINE_WIDTH,
+                zIndex = ACCESS_APPROACH_Z_INDEX + 1
+            )
+        }
     }
 
-    DestinationFlag(accessApproachRoute ?: route)
+    DestinationFlag(accessApproach?.route ?: route)
 }
 
 @Composable
@@ -134,6 +142,24 @@ private fun List<TrafficSegmentUi>.mergeAdjacentSegments(): List<TrafficSegmentU
 }
 
 private fun GeographicCoordinate.toMapLibreLatLng(): LatLng = LatLng(lat, lng)
+
+private data class HeavyVehicleAccessNavigationStyle(
+    val color: String,
+    val dashMeters: Double,
+    val gapMeters: Double
+)
+
+private fun HeavyVehicleAccessRelaxation.navigationStyle(): HeavyVehicleAccessNavigationStyle =
+    when (this) {
+        HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
+            HeavyVehicleAccessNavigationStyle("#FFB700", 7.0, 5.0)
+
+        HeavyVehicleAccessRelaxation.WEIGHT_RELAXED ->
+            HeavyVehicleAccessNavigationStyle("#FF7A00", 10.0, 4.0)
+
+        HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
+            HeavyVehicleAccessNavigationStyle("#E53935", 4.0, 4.0)
+    }
 
 private fun List<GeographicCoordinate>.toFixedDashSegments(
     dashMeters: Double = 7.0,
@@ -191,5 +217,4 @@ private const val ACCESS_APPROACH_Z_INDEX = 3
 private const val ACCESS_APPROACH_CASING_WIDTH = 10f
 private const val ACCESS_APPROACH_LINE_WIDTH = 6f
 private const val ACCESS_APPROACH_CASING_COLOR = "#282828"
-private const val ACCESS_APPROACH_COLOR = "#FFB700"
 private const val DESTINATION_FLAG_Z_INDEX = 5
