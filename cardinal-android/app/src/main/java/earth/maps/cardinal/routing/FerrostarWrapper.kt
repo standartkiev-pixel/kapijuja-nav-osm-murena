@@ -203,18 +203,25 @@ class FerrostarWrapper(
 
 
     /**
-     * Builds an optional dashed-access approach for Truck/Bus destinations that the strict
-     * heavy-vehicle route can only reach by snapping to a nearby legal edge.
+     * Builds an optional cautionary final approach when the strict heavy-vehicle route stops on
+     * a nearby legal edge instead of the requested destination.
      *
-     * The fallback uses AUTO access semantics with ignore_access=true, but preserves vehicle
-     * dimensions/weight and keeps ignore_restrictions/ignore_oneways/ignore_closures false.
-     * It is intentionally limited to a short final approach.
+     * Truck keeps the conservative 120 m access-only fallback.
+     *
+     * Bus may bridge up to 600 m. It first ignores mode-specific access only while preserving
+     * length/width/height/weight. Only if that cannot produce a route do we try progressively
+     * more permissive BUS-only fallbacks:
+     *  1. ignore weight, preserving length/width/height;
+     *  2. as a last resort ignore weight and length, preserving width/height.
+     *
+     * We never set ignore_restrictions=true, so maxheight/maxwidth and other hard restrictions
+     * remain active in every tier. One-way direction and closures remain active as well.
      */
     @OptIn(ExperimentalTime::class)
     suspend fun getAccessApproachRoute(
         strictRoute: Route,
         requestedDestination: GeographicCoordinate
-    ): Route? {
+    ): HeavyVehicleAccessApproach? {
         if (mode != RoutingMode.TRUCK && mode != RoutingMode.BUS) {
             return null
         }
@@ -223,24 +230,36 @@ class FerrostarWrapper(
             ?: strictRoute.geometry.lastOrNull()
             ?: return null
         val offsetMeters = strictEnd.distanceMetersTo(requestedDestination)
+        val maxOffsetMeters = when (mode) {
+            RoutingMode.BUS -> BUS_ACCESS_APPROACH_MAX_OFFSET_METERS
+            RoutingMode.TRUCK -> TRUCK_ACCESS_APPROACH_MAX_OFFSET_METERS
+            else -> return null
+        }
 
         if (offsetMeters < ACCESS_APPROACH_MIN_OFFSET_METERS ||
-            offsetMeters > ACCESS_APPROACH_MAX_OFFSET_METERS
+            offsetMeters > maxOffsetMeters
         ) {
             return null
         }
 
-        val accessOptions = previousRouteOptions?.toHeavyVehicleAccessOptions()
+        val baseAccessOptions = previousRouteOptions?.toHeavyVehicleAccessOptions()
             ?: routingProfileRepository.createDefaultOptionsForMode(mode)
                 ?.toHeavyVehicleAccessOptions()
             ?: return null
 
-        val accessCore = createCore(
-            routingOptions = accessOptions,
-            trafficEnabled = false,
-            includeForegroundServiceManager = false,
-            costingProfileOverride = ValhallaCostingProfile.Auto
-        )
+        val candidates = buildList {
+            add(baseAccessOptions to HeavyVehicleAccessRelaxation.ACCESS_ONLY)
+            if (mode == RoutingMode.BUS) {
+                add(
+                    baseAccessOptions.copy(weight = null) to
+                        HeavyVehicleAccessRelaxation.WEIGHT_RELAXED
+                )
+                add(
+                    baseAccessOptions.copy(weight = null, length = null) to
+                        HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED
+                )
+            }
+        }
 
         val initialLocation = UserLocation(
             coordinates = strictEnd,
@@ -249,16 +268,33 @@ class FerrostarWrapper(
             timestamp = Clock.System.now().toJavaInstant(),
             speed = null
         )
+        val destinationWaypoint = Waypoint(
+            coordinate = requestedDestination,
+            kind = WaypointKind.BREAK
+        )
 
-        return accessCore.getRoutes(
-            initialLocation = initialLocation,
-            waypoints = listOf(
-                Waypoint(
-                    coordinate = requestedDestination,
-                    kind = WaypointKind.BREAK
+        for ((accessOptions, relaxation) in candidates) {
+            val route = runCatching {
+                createCore(
+                    routingOptions = accessOptions,
+                    trafficEnabled = false,
+                    includeForegroundServiceManager = false,
+                    costingProfileOverride = ValhallaCostingProfile.Auto
+                ).getRoutes(
+                    initialLocation = initialLocation,
+                    waypoints = listOf(destinationWaypoint)
+                ).firstOrNull()
+            }.getOrNull()
+
+            if (route != null) {
+                return HeavyVehicleAccessApproach(
+                    route = route,
+                    relaxation = relaxation
                 )
-            )
-        ).firstOrNull()
+            }
+        }
+
+        return null
     }
 
     fun reprocessLastKnownLocation(core: FerrostarCore = this.core) {
@@ -339,7 +375,8 @@ class FerrostarWrapper(
         const val ROUTE_DEVIATION_MINIMUM_ACCURACY = 8u
         const val ROUTE_DEVIATION_MAX_DEVIATION = 25.0
         const val ACCESS_APPROACH_MIN_OFFSET_METERS = 8.0
-        const val ACCESS_APPROACH_MAX_OFFSET_METERS = 120.0
+        const val TRUCK_ACCESS_APPROACH_MAX_OFFSET_METERS = 120.0
+        const val BUS_ACCESS_APPROACH_MAX_OFFSET_METERS = 600.0
         val COURSE_FILTERING = CourseFiltering.RAW
     }
 }
