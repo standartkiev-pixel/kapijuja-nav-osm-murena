@@ -83,6 +83,7 @@ import earth.maps.cardinal.data.RoutingMode
 import earth.maps.cardinal.data.TransitPlanState
 import earth.maps.cardinal.data.formatDuration
 import earth.maps.cardinal.data.room.RoutingProfile
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
 import earth.maps.cardinal.routing.TrafficEtaCalibration
 import earth.maps.cardinal.ui.core.CardinalNavigator
 import earth.maps.cardinal.ui.core.CardinalRoute
@@ -690,7 +691,7 @@ fun RouteDisplayHandler(
     cameraState: org.maplibre.compose.camera.CameraState,
     appPreferences: AppPreferenceRepository,
     padding: PaddingValues,
-    onRouteUpdate: (Route?, List<Route>, Boolean, Double, Route?) -> Unit
+    onRouteUpdate: (Route?, List<Route>, Boolean, Double, HeavyVehicleAccessApproach?) -> Unit
 ) {
     val routeState by viewModel.routeState.collectAsState()
     val selectedRoute = routeState.routes.getOrNull(routeState.selectedRouteIndex ?: 0)
@@ -709,7 +710,7 @@ fun RouteDisplayHandler(
                 routeState.routes,
                 routeState.isTrafficAvailable,
                 routeState.etaCorrectionFactor,
-                routeState.accessApproachRoute
+                routeState.accessApproach
             )
             selectedRoute?.let { route ->
                 val coordinates = route.geometry
