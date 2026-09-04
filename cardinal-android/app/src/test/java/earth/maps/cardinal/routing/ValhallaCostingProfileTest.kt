@@ -75,6 +75,20 @@ class ValhallaCostingProfileTest {
     }
 
     @Test
+    fun `default bus uses native bus traffic profile`() {
+        val options = BusRoutingOptions()
+        val profile = RoutingMode.BUS.valhallaCostingProfile(
+            useTraffic = true,
+            routingOptions = options
+        )
+
+        assertTrue(options.lineBus)
+        assertTrue(profile is ValhallaCostingProfile.BusTraffic)
+        assertEquals("bus_traffic_premium", profile.routeProviderProfile)
+        assertEquals("bus", profile.costingOptionsKey)
+    }
+
+    @Test
     fun `native line bus traffic uses bus traffic profile`() {
         val profile = RoutingMode.BUS.valhallaCostingProfile(
             useTraffic = true,
