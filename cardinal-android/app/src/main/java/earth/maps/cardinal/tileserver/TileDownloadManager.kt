@@ -81,7 +81,7 @@ class TileDownloadManager(
         // Keep network parallelism deliberately moderate. Country downloads contain
         // hundreds of thousands of small basemap requests, so serial I/O is far too slow,
         // but aggressive fan-out can overload the provider or the device.
-        private const val MAX_CONCURRENT_DOWNLOADS = 5
+        private const val MAX_CONCURRENT_DOWNLOADS = 8
         private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 4
         private const val GEOCODER_BATCH_SIZE = 200
         private const val MAX_RETRY_COUNT = 3
