@@ -87,8 +87,10 @@ class OfflineGeocodingService(
             // Ingest the tile into the geocoder index
             airmailIndex.ingestTileWithCoordinates(tileData, x.toUInt(), y.toUInt(), zoom.toUByte())
         } catch (e: Exception) {
-            // Log the error but don't throw as this shouldn't break the tile download process
+            // Keep the tile retryable. The downloader commits geocoder work in bounded batches
+            // and marks a tile processed only after ingestion succeeds.
             Log.e(TAG, "Error processing tile $zoom/$x/$y", e)
+            throw e
         }
     }
 
