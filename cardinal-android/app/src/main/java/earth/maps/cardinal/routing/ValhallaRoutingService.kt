@@ -50,7 +50,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private const val TAG = "ValhallaRouting"
-private const val HEAVY_VEHICLE_WAYPOINT_RADIUS_METERS = 100
+private const val TRUCK_WAYPOINT_RADIUS_METERS = 100
+private const val BUS_WAYPOINT_RADIUS_METERS = 600
 
 class ValhallaRoutingService(
     private val appPreferenceRepository: AppPreferenceRepository,
@@ -151,9 +152,8 @@ class ValhallaRoutingService(
         return try {
             val root = Json.parseToJsonElement(request).jsonObject
             val costing = root["costing"]?.jsonPrimitive?.content ?: return request
-            if (!shouldApplyHeavyVehicleWaypointRadius(costing, root)) {
-                return request
-            }
+            val waypointRadiusMeters =
+                heavyVehicleWaypointRadiusMeters(costing, root) ?: return request
 
             val locations = root["locations"]?.jsonArray ?: return request
             val updatedLocations = locations.map { locationElement ->
@@ -163,7 +163,7 @@ class ValhallaRoutingService(
                 } else {
                     JsonObject(
                         location.toMutableMap().apply {
-                            put("radius", JsonPrimitive(HEAVY_VEHICLE_WAYPOINT_RADIUS_METERS))
+                            put("radius", JsonPrimitive(waypointRadiusMeters))
                         }
                     )
                 }
@@ -194,26 +194,42 @@ internal fun isBusCostingProfile(costing: String): Boolean {
         profile is ValhallaCostingProfile.BusTraffic
 }
 
-internal fun shouldApplyHeavyVehicleWaypointRadius(
+internal fun heavyVehicleWaypointRadiusMeters(
     costing: String,
     requestRoot: JsonObject
-): Boolean {
-    if (isTruckCostingProfile(costing) || isBusCostingProfile(costing)) {
-        return true
+): Int? {
+    if (isTruckCostingProfile(costing)) {
+        return TRUCK_WAYPOINT_RADIUS_METERS
+    }
+    if (isBusCostingProfile(costing)) {
+        return BUS_WAYPOINT_RADIUS_METERS
     }
 
     val profile = ValhallaCostingProfile.fromRouteProviderProfile(costing)
     val isAutoFamily = profile === ValhallaCostingProfile.Auto ||
         profile is ValhallaCostingProfile.AutoTraffic
     if (!isAutoFamily) {
-        return false
+        return null
     }
 
     val autoOptions = requestRoot["costing_options"]
         ?.jsonObject
         ?.get("auto")
         ?.jsonObject
-        ?: return false
+        ?: return null
 
-    return listOf("length", "width", "height", "weight").any(autoOptions::containsKey)
+    // In Kapijuja, AUTO with explicit heavy-vehicle dimensions and normal access rules is
+    // the tourist-coach ("Car" switch) profile. Give it the same 600 m legal-edge search
+    // as BUS. The dashed access fallback itself uses ignore_access=true and must NOT get
+    // this radius, otherwise Valhalla could snap the fallback destination away from the
+    // user's actual requested point.
+    val hasHeavyVehicleDimensions =
+        listOf("length", "width", "height", "weight").any(autoOptions::containsKey)
+    val isAccessFallback = autoOptions["ignore_access"]?.jsonPrimitive?.booleanOrNull == true
+
+    return if (hasHeavyVehicleDimensions && !isAccessFallback) {
+        BUS_WAYPOINT_RADIUS_METERS
+    } else {
+        null
+    }
 }
