@@ -28,6 +28,7 @@ import earth.maps.cardinal.data.PlanStateRepository
 import earth.maps.cardinal.data.RouteState
 import earth.maps.cardinal.data.RouteStateRepository
 import earth.maps.cardinal.data.RoutingMode
+import earth.maps.cardinal.data.RoutingProfileSelectionStore
 import earth.maps.cardinal.data.TransitPlanState
 import earth.maps.cardinal.data.ViewportRepository
 import earth.maps.cardinal.data.room.RecentSearchRepository
@@ -88,6 +89,7 @@ class DirectionsViewModelTest {
     private val mockSavedPlaceRepository = mockk<SavedPlaceRepository>()
     private val mockLocationRepository = mockk<LocationRepository>()
     private val mockRoutingProfileRepository = mockk<RoutingProfileRepository>()
+    private val mockRoutingProfileSelectionStore = mockk<RoutingProfileSelectionStore>(relaxed = true)
     private val mockRouteRepository = mockk<RouteRepository>()
     private val mockAppPreferenceRepository = mockk<AppPreferenceRepository>()
     private val mockTransitousService = mockk<TransitousService>()
@@ -142,6 +144,7 @@ class DirectionsViewModelTest {
             savedPlaceRepository = mockSavedPlaceRepository,
             locationRepository = mockLocationRepository,
             routingProfileRepository = mockRoutingProfileRepository,
+            routingProfileSelectionStore = mockRoutingProfileSelectionStore,
             routeRepository = mockRouteRepository,
             appPreferenceRepository = mockAppPreferenceRepository,
             transitousService = mockTransitousService,
