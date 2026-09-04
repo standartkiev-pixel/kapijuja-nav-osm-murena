@@ -177,7 +177,7 @@ class DirectionsViewModel @Inject constructor(
 
                 val accessApproach = routes.routes.firstOrNull()?.let { strictRoute ->
                     withContext(Dispatchers.IO) {
-                        runCatching {
+                        try {
                             ferrostarWrapper.getAccessApproachRoute(
                                 strictRoute = strictRoute,
                                 requestedDestination = GeographicCoordinate(
@@ -185,9 +185,12 @@ class DirectionsViewModel @Inject constructor(
                                     destination.latLng.longitude
                                 )
                             )
-                        }.onFailure { error ->
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
                             Log.w(TAG, "Heavy-vehicle access approach was unavailable", error)
-                        }.getOrNull()
+                            null
+                        }
                     }
                 }
 
