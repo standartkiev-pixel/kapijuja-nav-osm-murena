@@ -31,8 +31,10 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import earth.maps.cardinal.data.BoundingBox
+import earth.maps.cardinal.data.EuropeanCountryDownloadRegion
 import earth.maps.cardinal.data.room.OfflineArea
 import earth.maps.cardinal.data.room.OfflineAreaRepository
+import earth.maps.cardinal.tileserver.CountryTileMask
 import earth.maps.cardinal.tileserver.DownloadStage
 import earth.maps.cardinal.tileserver.PermissionRequestManager
 import earth.maps.cardinal.tileserver.TileDownloadForegroundService
@@ -62,6 +64,7 @@ class OfflineAreasViewModel @Inject constructor(
     // New unified progress properties
     val unifiedProgress = mutableFloatStateOf(0f) // 0.0 to 1.0
     val currentStage = mutableStateOf(DownloadStage.BASEMAP)
+    private val countryTileMask by lazy { CountryTileMask(context) }
 
     // Error handling
     private val _errorMessage = MutableStateFlow<String?>(null)
@@ -152,6 +155,37 @@ class OfflineAreasViewModel @Inject constructor(
                 name
             )
         }
+    }
+
+    fun startCountryDownload(country: EuropeanCountryDownloadRegion) {
+        viewModelScope.launch {
+            if (permissionRequestManager.shouldRequestNotificationPermission(context)) {
+                permissionRequestManager.requestNotificationPermissionAndWaitForResult()
+            }
+
+            serviceBinder?.getService()?.startCountryDownload(
+                country.boundingBox,
+                OFFLINE_AREA_MIN_ZOOM,
+                OFFLINE_AREA_MAX_ZOOM,
+                country.name,
+                country.countryCode
+            )
+        }
+    }
+
+    fun estimateCountryTileCount(country: EuropeanCountryDownloadRegion): Int {
+        var totalTiles = 0
+        for (zoom in OFFLINE_AREA_MIN_ZOOM..OFFLINE_AREA_MAX_ZOOM) {
+            val (minX, maxX, minY, maxY) = calculateTileRange(country.boundingBox, zoom)
+            for (x in minX..maxX) {
+                for (y in minY..maxY) {
+                    if (countryTileMask.containsBufferedTile(country.countryCode, zoom, x, y)) {
+                        totalTiles++
+                    }
+                }
+            }
+        }
+        return totalTiles
     }
 
     fun deleteOfflineArea(offlineArea: OfflineArea) {

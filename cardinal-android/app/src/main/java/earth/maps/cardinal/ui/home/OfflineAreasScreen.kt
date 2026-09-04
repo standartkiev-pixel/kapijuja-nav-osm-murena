@@ -110,14 +110,10 @@ fun OfflineAreasScreen(
         countryToDownload?.let { country ->
             CountryDownloadConfirmationDialog(
                 country = country,
-                estimatedTileCount = viewModel.estimateTileCount(
-                    country.boundingBox,
-                    OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
-                    OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
-                ),
+                estimatedTileCount = viewModel.estimateCountryTileCount(country),
                 onDismiss = { countryToDownload = null },
                 onDownload = {
-                    viewModel.startDownload(country.boundingBox, country.name)
+                    viewModel.startCountryDownload(country)
                     countryToDownload = null
                     showEuropeCountries = false
                 }
@@ -521,11 +517,7 @@ private fun EuropeCountryDownloadScreen(
                             Text(country.name, style = MaterialTheme.typography.titleMedium)
                             Text(country.countryCode, style = MaterialTheme.typography.bodySmall)
                         }
-                        val count = viewModel.estimateTileCount(
-                            country.boundingBox,
-                            OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
-                            OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
-                        )
+                        val count = viewModel.estimateCountryTileCount(country)
                         Text("~$count tiles", style = MaterialTheme.typography.bodySmall)
                     }
                 }

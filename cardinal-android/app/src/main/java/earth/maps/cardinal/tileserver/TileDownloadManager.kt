@@ -72,6 +72,7 @@ class TileDownloadManager(
     private val httpClient = HttpClient(Android) {
         install(ContentNegotiation)
     }
+    private val countryTileMask by lazy { CountryTileMask(context) }
 
 
     companion object {
@@ -84,6 +85,13 @@ class TileDownloadManager(
         private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 4
         private const val GEOCODER_BATCH_SIZE = 200
         private const val MAX_RETRY_COUNT = 3
+        private const val COUNTRY_AREA_PREFIX = "country-"
+
+        fun countryCodeFromAreaId(areaId: String?): String? {
+            if (areaId == null || !areaId.startsWith(COUNTRY_AREA_PREFIX)) return null
+            val code = areaId.removePrefix(COUNTRY_AREA_PREFIX).substringBefore('-').uppercase()
+            return code.takeIf { it.length == 2 }
+        }
     }
 
     /**
@@ -101,7 +109,8 @@ class TileDownloadManager(
         val (totalExpectedBasemapTiles, _) = calculateTotalTiles(
             boundingBox = existingArea.boundingBox(),
             existingArea.minZoom,
-            minOf(existingArea.maxZoom, MAX_BASEMAP_ZOOM)
+            minOf(existingArea.maxZoom, MAX_BASEMAP_ZOOM),
+            areaId
         )
 
         Log.d(
@@ -251,7 +260,7 @@ class TileDownloadManager(
 
             db = initializeDatabase()
             val (totalBasemapTiles, totalTilesToProcess, totalValhallaTiles) =
-                calculateTotalDownloadCounts(boundingBox, minZoom, maxZoom)
+                calculateTotalDownloadCounts(boundingBox, minZoom, maxZoom, areaId)
             val (downloadedBasemapTiles, downloadedValhallaTiles, processedTiles) =
                 getCurrentProgressCounts(areaId)
 
@@ -275,7 +284,7 @@ class TileDownloadManager(
             db = null
 
             val fileSize = calculateAndLogCompletionStats(
-                boundingBox, minZoom, maxZoom,
+                boundingBox, minZoom, maxZoom, areaId,
                 basemapResult, valhallaResult,
                 downloadedBasemapTiles, downloadedValhallaTiles
             )
@@ -313,10 +322,10 @@ class TileDownloadManager(
      * Calculate total counts for basemap and Valhalla tiles
      */
     private fun calculateTotalDownloadCounts(
-        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int
+        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int, areaId: String
     ): Triple<Int, Int, Int> {
         val (totalBasemapTiles, totalTilesToProcess) = calculateTotalTiles(
-            boundingBox, minZoom, min(maxZoom, MAX_BASEMAP_ZOOM)
+            boundingBox, minZoom, min(maxZoom, MAX_BASEMAP_ZOOM), areaId
         )
         val totalValhallaTiles = ValhallaTileUtils.tilesForBoundingBox(boundingBox).size
 
@@ -544,7 +553,7 @@ class TileDownloadManager(
      * Calculate completion stats and log results
      */
     private fun calculateAndLogCompletionStats(
-        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int,
+        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int, areaId: String,
         basemapResult: Pair<Int, Int>, valhallaResult: Pair<Int, Int>,
         downloadedBasemapTiles: Int, downloadedValhallaTiles: Int
     ): Long {
@@ -552,7 +561,7 @@ class TileDownloadManager(
         val fileSize = outputFile.length()
 
         val totalBasemapTiles =
-            calculateTotalTiles(boundingBox, minZoom, min(maxZoom, MAX_BASEMAP_ZOOM))
+            calculateTotalTiles(boundingBox, minZoom, min(maxZoom, MAX_BASEMAP_ZOOM), areaId).first
         val totalValhallaTiles = ValhallaTileUtils.tilesForBoundingBox(boundingBox).size
 
         val totalBasemapDownloaded = basemapResult.first + downloadedBasemapTiles
@@ -678,11 +687,14 @@ class TileDownloadManager(
 
         try {
             // Calculate total tiles
-            val (totalTiles, totalTilesToProcess) = calculateTotalTiles(boundingBox, minZoom, maxZoom)
+            val (totalTiles, totalTilesToProcess) =
+                calculateTotalTiles(boundingBox, minZoom, maxZoom, areaId)
 
-            // Materialize all tile coordinates first to simplify processing
+            // Materialize only the basemap tiles actually needed by this area. Country downloads
+            // use a conservative country+50 km mask at z10-z14; custom viewport downloads retain
+            // the exact old rectangular behavior.
             val tileCoordinates =
-                generateTileCoordinates(boundingBox, minZoom, maxZoom)
+                generateTileCoordinates(boundingBox, minZoom, maxZoom, areaId)
 
             Log.d(TAG, "Total basemap tiles to process: $totalTilesToProcess")
 
@@ -720,7 +732,18 @@ class TileDownloadManager(
                 initializeMbtilesSchema(db)
             }
 
+            val globalTileKeys = loadGlobalBasemapTileKeys(db)
+
             for (chunk in tileCoordinates.chunked(MAX_CONCURRENT_DOWNLOADS)) {
+                // If a neighbouring country has already stored the same tile, copy the existing
+                // BLOB into this area's row and record it in Room without another HTTP request.
+                // Disk duplication is intentional here: it keeps the existing schema/renderer and
+                // deletion semantics unchanged while eliminating duplicate network traffic.
+                val reused = reuseExistingBasemapTiles(
+                    db, chunk, areaId, successfulTileIds, failedTileIds, globalTileKeys
+                )
+                if (reused > 0) downloadedCount.addAndGet(reused)
+
                 // Process this batch with parallel downloads
                 val tileData = processBatch(
                     chunk,
@@ -795,6 +818,93 @@ class TileDownloadManager(
             }
         }
     }
+
+    private fun loadGlobalBasemapTileKeys(db: SQLiteDatabase): MutableSet<Long> {
+        val keys = HashSet<Long>()
+        db.rawQuery(
+            "SELECT DISTINCT zoom_level, tile_column, tile_row FROM tiles",
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val zoom = cursor.getInt(0)
+                val x = cursor.getInt(1)
+                val tmsY = cursor.getInt(2)
+                val xyzY = ((1 shl zoom) - 1) - tmsY
+                keys.add(packTileKey(zoom, x, xyzY))
+            }
+        }
+        return keys
+    }
+
+    private suspend fun reuseExistingBasemapTiles(
+        db: SQLiteDatabase,
+        chunk: List<Triple<Int, Int, Int>>,
+        areaId: String,
+        successfulTileIds: MutableSet<String>,
+        failedTileIds: MutableSet<String>,
+        globalTileKeys: MutableSet<Long>
+    ): Int {
+        val records = mutableListOf<DownloadedTile>()
+        val copyStatement = db.compileStatement(
+            """
+            INSERT OR REPLACE INTO tiles
+                (zoom_level, tile_column, tile_row, tile_data, area_id)
+            SELECT zoom_level, tile_column, tile_row, tile_data, ?
+            FROM tiles
+            WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?
+            LIMIT 1
+            """.trimIndent()
+        )
+
+        db.beginTransaction()
+        try {
+            for ((zoom, x, y) in chunk) {
+                val tileId = "basemap_${areaId}_${zoom}_${x}_${y}"
+                if (tileId in successfulTileIds) continue
+                if (packTileKey(zoom, x, y) !in globalTileKeys) continue
+
+                val tmsY = ((1 shl zoom) - 1) - y
+                copyStatement.bindString(1, areaId)
+                copyStatement.bindLong(2, zoom.toLong())
+                copyStatement.bindLong(3, x.toLong())
+                copyStatement.bindLong(4, tmsY.toLong())
+                val rowId = copyStatement.executeInsert()
+                copyStatement.clearBindings()
+                if (rowId == -1L) continue
+
+                records.add(
+                    DownloadedTile(
+                        id = tileId,
+                        areaId = areaId,
+                        tileType = TileType.BASEMAP,
+                        downloadTimestamp = System.currentTimeMillis(),
+                        retryCount = 0,
+                        zoom = zoom,
+                        tileX = x,
+                        tileY = y,
+                        processed = false,
+                        hierarchyLevel = null,
+                        tileIndex = null
+                    )
+                )
+                successfulTileIds.add(tileId)
+                failedTileIds.remove(tileId)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            copyStatement.close()
+            db.endTransaction()
+        }
+
+        if (records.isNotEmpty()) {
+            downloadedTileDao.insertDownloadedTiles(records)
+            Log.d(TAG, "Reused ${records.size} basemap tiles from existing offline countries")
+        }
+        return records.size
+    }
+
+    private fun packTileKey(zoom: Int, x: Int, y: Int): Long =
+        (zoom.toLong() shl 58) or (x.toLong() shl 29) or y.toLong()
 
     /**
      * Download Valhalla tiles for the given bounds
@@ -1107,43 +1217,58 @@ class TileDownloadManager(
      * Calculate total number of tiles for all zoom levels
      */
     fun calculateTotalTiles(
-        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int
+        boundingBox: BoundingBox,
+        minZoom: Int,
+        maxZoom: Int,
+        areaId: String? = null
     ): Pair<Int, Int> {
         var totalTiles = 0
         var z14Tiles = 0
+        val countryCode = countryCodeFromAreaId(areaId)
+
         for (zoom in minZoom..maxZoom) {
             val (minX, maxX, minY, maxY) = calculateTileRange(boundingBox, zoom)
-            val zoomTileCount = (maxX - minX + 1) * (maxY - minY + 1)
-            totalTiles += zoomTileCount
-            if (zoom == 14) {
-                z14Tiles += zoomTileCount
+            for (x in minX..maxX) {
+                for (y in minY..maxY) {
+                    if (countryCode != null &&
+                        !countryTileMask.containsBufferedTile(countryCode, zoom, x, y)
+                    ) {
+                        continue
+                    }
+                    totalTiles++
+                    if (zoom == 14) z14Tiles++
+                }
             }
-            Log.d(
-                TAG, "Zoom $zoom: tiles from ($minX,$minY) to ($maxX,$maxY), count: $zoomTileCount"
-            )
         }
         return Pair(totalTiles, z14Tiles)
     }
 
     /**
-     * Generate all tile coordinates for the given bounds and zoom levels
+     * Generate all basemap coordinates. Country areas are conservatively masked; normal
+     * user-selected viewport areas keep the previous full rectangle.
      */
     private fun generateTileCoordinates(
-        boundingBox: BoundingBox, minZoom: Int, maxZoom: Int
+        boundingBox: BoundingBox,
+        minZoom: Int,
+        maxZoom: Int,
+        areaId: String? = null
     ): List<Triple<Int, Int, Int>> {
         val tileCoordinates = mutableListOf<Triple<Int, Int, Int>>()
+        val countryCode = countryCodeFromAreaId(areaId)
 
         for (zoom in minZoom..maxZoom) {
             val (minX, maxX, minY, maxY) = calculateTileRange(boundingBox, zoom)
-
-            // Collect all tile coordinates for this zoom level
             for (x in minX..maxX) {
                 for (y in minY..maxY) {
+                    if (countryCode != null &&
+                        !countryTileMask.containsBufferedTile(countryCode, zoom, x, y)
+                    ) {
+                        continue
+                    }
                     tileCoordinates.add(Triple(zoom, x, y))
                 }
             }
         }
-
         return tileCoordinates
     }
 

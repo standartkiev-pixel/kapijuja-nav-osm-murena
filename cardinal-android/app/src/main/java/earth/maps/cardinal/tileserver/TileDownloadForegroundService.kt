@@ -348,7 +348,7 @@ class TileDownloadForegroundService : Service() {
             try {
                 // Calculate expected tiles for progress tracking
                 val expectedBasemapTiles = tileDownloadManager.calculateTotalTiles(
-                    boundingBox, minZoom, maxZoom
+                    boundingBox, minZoom, maxZoom, areaId
                 )
                 val expectedValhallaTiles = ValhallaTileUtils.tilesForBoundingBox(boundingBox).size
 
@@ -525,6 +525,18 @@ class TileDownloadForegroundService : Service() {
 
     fun startDownload(boundingBox: BoundingBox, minZoom: Int, maxZoom: Int, areaName: String) {
         val areaId = UUID.randomUUID().toString()
+        tileDownloadManager.downloadTiles(boundingBox, minZoom, maxZoom, areaId, areaName)
+    }
+
+    fun startCountryDownload(
+        boundingBox: BoundingBox,
+        minZoom: Int,
+        maxZoom: Int,
+        areaName: String,
+        countryCode: String
+    ) {
+        val normalizedCode = countryCode.uppercase().take(2)
+        val areaId = "country-${normalizedCode}-${UUID.randomUUID()}"
         tileDownloadManager.downloadTiles(boundingBox, minZoom, maxZoom, areaId, areaName)
     }
 
