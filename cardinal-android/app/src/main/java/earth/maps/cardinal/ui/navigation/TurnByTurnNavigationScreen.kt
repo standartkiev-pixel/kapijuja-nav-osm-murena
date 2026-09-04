@@ -87,6 +87,7 @@ fun TurnByTurnNavigationScreen(
     port: Int,
     mode: RoutingMode,
     route: Route?,
+    accessApproachRoute: Route? = null,
     useDarkTheme: Boolean
 ) {
     val context = LocalContext.current
@@ -222,7 +223,8 @@ fun TurnByTurnNavigationScreen(
                             context = context,
                             route = activeTrafficRoute.value,
                             remainingSteps = uiState.remainingSteps,
-                            trafficAvailable = trafficAvailable.value
+                            trafficAvailable = trafficAvailable.value,
+                            accessApproachRoute = accessApproachRoute
                         )
                     }
                 )
