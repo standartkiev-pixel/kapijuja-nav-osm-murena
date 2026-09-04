@@ -14,9 +14,9 @@ import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
 
 /**
- * A short, explicitly cautionary final approach that is not part of the strict heavy-vehicle
- * route. The relaxation level is kept with the geometry so preview and turn-by-turn UI can make
- * progressively riskier fallbacks visually distinct.
+ * A final connector between the end of the primary route and the road point associated with the
+ * requested destination. ROUTABLE_SNAP means the original strict profile can drive the connector
+ * and it is drawn normally. Other levels are cautionary fallbacks that required relaxed access.
  */
 data class HeavyVehicleAccessApproach(
     val route: Route,
