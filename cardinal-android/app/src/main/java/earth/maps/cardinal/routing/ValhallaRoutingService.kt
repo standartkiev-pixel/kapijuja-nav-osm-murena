@@ -50,7 +50,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private const val TAG = "ValhallaRouting"
-private const val TRUCK_WAYPOINT_RADIUS_METERS = 100
+private const val HEAVY_VEHICLE_WAYPOINT_RADIUS_METERS = 100
 
 class ValhallaRoutingService(
     private val appPreferenceRepository: AppPreferenceRepository,
@@ -136,21 +136,22 @@ class ValhallaRoutingService(
 
     /**
      * Valhalla normally correlates a waypoint to the single closest edge when radius is zero.
-     * For truck routing this can make a perfectly reachable geographic destination unroutable
-     * when the closest edge itself has HGV access restrictions. A small candidate radius lets
-     * Valhalla choose a nearby edge which is actually legal for the truck costing model.
+     * For heavy-vehicle routing this can make a perfectly reachable geographic destination
+     * unroutable when the closest edge itself has Truck/Bus access restrictions. A small
+     * candidate radius lets Valhalla choose a nearby edge which is legal for the strict
+     * heavy-vehicle costing model.
      *
-     * Traffic costings use names such as truck_traffic_premium, but they are still Truck
-     * costings and need exactly the same waypoint correlation treatment as plain truck.
+     * This applies to Truck, Bus, their traffic variants, and coach requests that use AUTO
+     * access semantics while carrying physical vehicle dimensions in costing_options.auto.
      *
-     * This does NOT disable or soften truck restrictions: the costing model still decides
+     * This does NOT disable or soften heavy-vehicle restrictions: the costing model still decides
      * which candidate edges are legal. It only broadens waypoint-to-road correlation.
      */
     private fun prepareVehicleRouteRequest(request: String): String {
         return try {
             val root = Json.parseToJsonElement(request).jsonObject
             val costing = root["costing"]?.jsonPrimitive?.content ?: return request
-            if (!isTruckCostingProfile(costing)) {
+            if (!shouldApplyHeavyVehicleWaypointRadius(costing, root)) {
                 return request
             }
 
@@ -162,7 +163,7 @@ class ValhallaRoutingService(
                 } else {
                     JsonObject(
                         location.toMutableMap().apply {
-                            put("radius", JsonPrimitive(TRUCK_WAYPOINT_RADIUS_METERS))
+                            put("radius", JsonPrimitive(HEAVY_VEHICLE_WAYPOINT_RADIUS_METERS))
                         }
                     )
                 }
@@ -185,4 +186,34 @@ internal fun isTruckCostingProfile(costing: String): Boolean {
     val profile = ValhallaCostingProfile.fromRouteProviderProfile(costing)
     return profile === ValhallaCostingProfile.Truck ||
         profile is ValhallaCostingProfile.TruckTraffic
+}
+
+internal fun isBusCostingProfile(costing: String): Boolean {
+    val profile = ValhallaCostingProfile.fromRouteProviderProfile(costing)
+    return profile === ValhallaCostingProfile.Bus ||
+        profile is ValhallaCostingProfile.BusTraffic
+}
+
+internal fun shouldApplyHeavyVehicleWaypointRadius(
+    costing: String,
+    requestRoot: JsonObject
+): Boolean {
+    if (isTruckCostingProfile(costing) || isBusCostingProfile(costing)) {
+        return true
+    }
+
+    val profile = ValhallaCostingProfile.fromRouteProviderProfile(costing)
+    val isAutoFamily = profile === ValhallaCostingProfile.Auto ||
+        profile is ValhallaCostingProfile.AutoTraffic
+    if (!isAutoFamily) {
+        return false
+    }
+
+    val autoOptions = requestRoot["costing_options"]
+        ?.jsonObject
+        ?.get("auto")
+        ?.jsonObject
+        ?: return false
+
+    return listOf("length", "width", "height", "weight").any(autoOptions::containsKey)
 }
