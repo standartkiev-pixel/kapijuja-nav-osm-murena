@@ -520,11 +520,14 @@ private fun BusOptionsEditor(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Line Bus")
+            Text("Car")
             Switch(
-                checked = options.lineBus,
-                onCheckedChange = { enabled ->
-                    onOptionsChanged(options.copy(lineBus = enabled))
+                // Keep the persisted lineBus field for backward compatibility:
+                // Car ON = auto access semantics with coach dimensions;
+                // Car OFF = true Valhalla bus/PSV access semantics.
+                checked = !options.lineBus,
+                onCheckedChange = { carEnabled ->
+                    onOptionsChanged(options.copy(lineBus = !carEnabled))
                 }
             )
         }
