@@ -137,6 +137,7 @@ fun MapView(
     allRoutes: List<Route>,
     trafficAvailable: Boolean = false,
     etaCorrectionFactor: Double = 1.0,
+    accessApproachRoute: Route? = null,
     currentTransitItinerary: Itinerary? = null,
     highlightedTransitLegIndex: Int? = null,
     onRouteAnnotationClick: ((Int) -> Unit)? = null,
@@ -213,6 +214,7 @@ fun MapView(
                     allRoutes,
                     trafficAvailable,
                     etaCorrectionFactor,
+                    accessApproachRoute,
                     visibleRegion = cameraState.projection?.queryVisibleRegion(),
                     screenWidthDp = screenWidthDp,
                     screenHeightDp = screenHeightDp
@@ -340,6 +342,7 @@ private fun RouteLayer(
     allRoutes: List<Route>,
     trafficAvailable: Boolean,
     etaCorrectionFactor: Double,
+    accessApproachRoute: Route?,
     visibleRegion: VisibleRegion?,
     screenWidthDp: Dp,
     screenHeightDp: Dp
@@ -429,6 +432,42 @@ private fun RouteLayer(
         cap = const(LineCap.Round),
         join = const(LineJoin.Round),
     )
+
+    accessApproachRoute?.geometry?.takeIf { it.size >= 2 }?.let { accessGeometry ->
+        val accessFeature = Feature(
+            geometry = LineString(
+                accessGeometry.map { coordinate -> Position(coordinate.lng, coordinate.lat) }
+            ),
+            properties = null
+        )
+        val accessSource = rememberGeoJsonSource(
+            GeoJsonData.JsonString(
+                Json.encodeToString(
+                    FeatureCollection(features = listOf(accessFeature))
+                )
+            )
+        )
+        LineLayer(
+            id = "heavy_vehicle_access_approach_casing",
+            source = accessSource,
+            color = rgbColor(const(40), const(40), const(40)),
+            dasharray = const(listOf(1.4, 1.1)),
+            width = const(10.dp),
+            opacity = const(0.9f),
+            cap = const(LineCap.Round),
+            join = const(LineJoin.Round),
+        )
+        LineLayer(
+            id = "heavy_vehicle_access_approach",
+            source = accessSource,
+            color = rgbColor(const(255), const(183), const(0)),
+            dasharray = const(listOf(1.4, 1.1)),
+            width = const(6.dp),
+            opacity = const(1f),
+            cap = const(LineCap.Round),
+            join = const(LineJoin.Round),
+        )
+    }
 
     // Route casing layer
     LineLayer(
