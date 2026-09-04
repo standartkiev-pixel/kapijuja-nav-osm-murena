@@ -51,7 +51,9 @@ import uniffi.ferrostar.Route
 import uniffi.ferrostar.RouteAdapter
 import uniffi.ferrostar.RouteDeviationTracking
 import uniffi.ferrostar.UserLocation
+import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Waypoint
+import uniffi.ferrostar.WaypointKind
 import uniffi.ferrostar.WaypointAdvanceMode
 import uniffi.ferrostar.WellKnownRouteProvider
 import uniffi.ferrostar.stepAdvanceDistanceEntryAndExit
@@ -60,6 +62,10 @@ import java.net.HttpURLConnection
 import java.util.concurrent.Executor
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.time.toJavaInstant
 
 class FerrostarWrapper(
@@ -195,6 +201,65 @@ class FerrostarWrapper(
         )
     }
 
+
+    /**
+     * Builds an optional dashed-access approach for Truck/Bus destinations that the strict
+     * heavy-vehicle route can only reach by snapping to a nearby legal edge.
+     *
+     * The fallback uses AUTO access semantics with ignore_access=true, but preserves vehicle
+     * dimensions/weight and keeps ignore_restrictions/ignore_oneways/ignore_closures false.
+     * It is intentionally limited to a short final approach.
+     */
+    suspend fun getAccessApproachRoute(
+        strictRoute: Route,
+        requestedDestination: GeographicCoordinate
+    ): Route? {
+        if (mode != RoutingMode.TRUCK && mode != RoutingMode.BUS) {
+            return null
+        }
+
+        val strictEnd = strictRoute.waypoints.lastOrNull()?.coordinate
+            ?: strictRoute.geometry.lastOrNull()
+            ?: return null
+        val offsetMeters = strictEnd.distanceMetersTo(requestedDestination)
+
+        if (offsetMeters < ACCESS_APPROACH_MIN_OFFSET_METERS ||
+            offsetMeters > ACCESS_APPROACH_MAX_OFFSET_METERS
+        ) {
+            return null
+        }
+
+        val accessOptions = previousRouteOptions?.toHeavyVehicleAccessOptions()
+            ?: routingProfileRepository.createDefaultOptionsForMode(mode)
+                ?.toHeavyVehicleAccessOptions()
+            ?: return null
+
+        val accessCore = createCore(
+            routingOptions = accessOptions,
+            trafficEnabled = false,
+            includeForegroundServiceManager = false,
+            costingProfileOverride = ValhallaCostingProfile.Auto
+        )
+
+        val initialLocation = UserLocation(
+            coordinates = strictEnd,
+            horizontalAccuracy = 5.0,
+            courseOverGround = null,
+            timestamp = Clock.System.now().toJavaInstant(),
+            speed = null
+        )
+
+        return accessCore.getRoutes(
+            initialLocation = initialLocation,
+            waypoints = listOf(
+                Waypoint(
+                    coordinate = requestedDestination,
+                    kind = WaypointKind.BREAK
+                )
+            )
+        ).firstOrNull()
+    }
+
     fun reprocessLastKnownLocation(core: FerrostarCore = this.core) {
         locationProvider.lastLocation?.let(core::onLocationUpdated)
     }
@@ -210,9 +275,11 @@ class FerrostarWrapper(
     private fun createCore(
         routingOptions: RoutingOptions?,
         trafficEnabled: Boolean = isTrafficEnabled,
-        includeForegroundServiceManager: Boolean = true
+        includeForegroundServiceManager: Boolean = true,
+        costingProfileOverride: ValhallaCostingProfile? = null
     ): FerrostarCore {
-        val costingProfile = mode.valhallaCostingProfile(trafficEnabled, routingOptions)
+        val costingProfile = costingProfileOverride
+            ?: mode.valhallaCostingProfile(trafficEnabled, routingOptions)
         val profile = costingProfile.routeProviderProfile
         return FerrostarCore(
             routeAdapter = RouteAdapter.fromWellKnownRouteProvider(
@@ -270,8 +337,21 @@ class FerrostarWrapper(
         const val ARRIVAL_STEP_ADVANCE_MINIMUM_HORIZONTAL_ACCURACY = 32u
         const val ROUTE_DEVIATION_MINIMUM_ACCURACY = 8u
         const val ROUTE_DEVIATION_MAX_DEVIATION = 25.0
+        const val ACCESS_APPROACH_MIN_OFFSET_METERS = 8.0
+        const val ACCESS_APPROACH_MAX_OFFSET_METERS = 120.0
         val COURSE_FILTERING = CourseFiltering.RAW
     }
+}
+
+private fun GeographicCoordinate.distanceMetersTo(other: GeographicCoordinate): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val lat1 = Math.toRadians(lat)
+    val lat2 = Math.toRadians(other.lat)
+    val deltaLat = lat2 - lat1
+    val deltaLng = Math.toRadians(other.lng - lng)
+    val a = sin(deltaLat / 2) * sin(deltaLat / 2) +
+        cos(lat1) * cos(lat2) * sin(deltaLng / 2) * sin(deltaLng / 2)
+    return 2 * earthRadiusMeters * atan2(sqrt(a), sqrt(1 - a))
 }
 
 data class TrafficRouteResult(
