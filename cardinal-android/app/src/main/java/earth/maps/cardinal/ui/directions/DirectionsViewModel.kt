@@ -175,7 +175,7 @@ class DirectionsViewModel @Inject constructor(
                     ferrostarWrapper.getRoutesWithTrafficFallback(userLocation, waypoints)
                 }
 
-                val accessApproachRoute = routes.routes.firstOrNull()?.let { strictRoute ->
+                val accessApproach = routes.routes.firstOrNull()?.let { strictRoute ->
                     withContext(Dispatchers.IO) {
                         runCatching {
                             ferrostarWrapper.getAccessApproachRoute(
@@ -200,7 +200,7 @@ class DirectionsViewModel @Inject constructor(
                         null
                     },
                     etaCorrectionFactor = ferrostarWrapper.etaCorrectionFactor,
-                    accessApproachRoute = accessApproachRoute
+                    accessApproach = accessApproach
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -381,7 +381,7 @@ class DirectionsViewModel @Inject constructor(
             CardinalRoute.TurnByTurnNavigation(
                 routeId = routeRepository.storeRoute(
                     route = route,
-                    accessApproachRoute = state.accessApproachRoute
+                    accessApproach = state.accessApproach
                 ),
                 routingMode = selectedRoutingMode
             )
