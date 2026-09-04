@@ -106,11 +106,11 @@ class HeavyVehicleDefaultsTest {
     fun `bus weight relaxed fallback still preserves length width and height`() {
         val base = BusRoutingOptions().toHeavyVehicleAccessOptions()
             ?: error("bus access options missing")
-        val json = base.copy(weight = null).toValhallaOptionsJson(
+        val json = base.copy(weight = 0.0).toValhallaOptionsJson(
             costingProfileOverride = ValhallaCostingProfile.Auto
         )
 
-        assertFalse(json.contains("\"weight\""))
+        assertTrue(json.contains("\"weight\":0.0"))
         assertTrue(json.contains("\"length\":13.5"))
         assertTrue(json.contains("\"width\":2.5"))
         assertTrue(json.contains("\"height\":4.0"))
@@ -122,12 +122,12 @@ class HeavyVehicleDefaultsTest {
     fun `bus last resort may relax weight and length but never width or height`() {
         val base = BusRoutingOptions().toHeavyVehicleAccessOptions()
             ?: error("bus access options missing")
-        val json = base.copy(weight = null, length = null).toValhallaOptionsJson(
+        val json = base.copy(weight = 0.0, length = 0.0).toValhallaOptionsJson(
             costingProfileOverride = ValhallaCostingProfile.Auto
         )
 
-        assertFalse(json.contains("\"weight\""))
-        assertFalse(json.contains("\"length\""))
+        assertTrue(json.contains("\"weight\":0.0"))
+        assertTrue(json.contains("\"length\":0.0"))
         assertTrue(json.contains("\"width\":2.5"))
         assertTrue(json.contains("\"height\":4.0"))
         assertTrue(json.contains("\"ignore_access\":true"))
