@@ -64,4 +64,41 @@ class HeavyVehicleDefaultsTest {
         assertTrue(json.contains("\"axle_count\":3"))
         assertTrue(json.contains("\"closure_factor\":10.0"))
     }
+
+    @Test
+    fun `truck access approach ignores access tags but keeps physical restrictions enabled`() {
+        val access = TruckRoutingOptions().toHeavyVehicleAccessOptions()
+            ?: error("truck access options missing")
+        val json = access.toValhallaOptionsJson(
+            costingProfileOverride = ValhallaCostingProfile.Auto
+        )
+
+        assertTrue(json.contains("\"ignore_access\":true"))
+        assertTrue(json.contains("\"ignore_restrictions\":false"))
+        assertTrue(json.contains("\"ignore_one_ways\":false"))
+        assertTrue(json.contains("\"ignore_closures\":false"))
+        assertTrue(json.contains("\"length\":16.5"))
+        assertTrue(json.contains("\"width\":2.5"))
+        assertTrue(json.contains("\"height\":4.0"))
+        assertTrue(json.contains("\"weight\":45.0"))
+        assertTrue(json.contains("\"costing_options\":{\"auto\""))
+    }
+
+    @Test
+    fun `bus access approach preserves coach dimensions while using car access semantics`() {
+        val access = BusRoutingOptions().toHeavyVehicleAccessOptions()
+            ?: error("bus access options missing")
+        val json = access.toValhallaOptionsJson(
+            costingProfileOverride = ValhallaCostingProfile.Auto
+        )
+
+        assertTrue(json.contains("\"ignore_access\":true"))
+        assertTrue(json.contains("\"ignore_restrictions\":false"))
+        assertTrue(json.contains("\"length\":13.5"))
+        assertTrue(json.contains("\"height\":4.0"))
+        assertTrue(json.contains("\"weight\":18.0"))
+        assertFalse(json.contains("line_bus"))
+        assertFalse(json.contains("axle_count"))
+    }
+
 }
