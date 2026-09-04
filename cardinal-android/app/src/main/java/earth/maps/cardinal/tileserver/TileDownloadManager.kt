@@ -1136,17 +1136,7 @@ class TileDownloadManager(
 
         val attempts = chunk.mapNotNull { (z, xCoord, yCoord) ->
             val tileId = "basemap_${areaId}_${z}_${xCoord}_${yCoord}"
-            val preloadedSuccess = successfulTileIds?.contains(tileId) == true
-            if (preloadedSuccess) {
-                progressReporter?.updateProgress(
-                    areaId = areaId,
-                    areaName = areaName,
-                    currentStage = DownloadStage.BASEMAP,
-                    stageProgress = downloadedCount.get(),
-                    stageTotal = totalTiles,
-                    isCompleted = false,
-                    hasError = false
-                )
+            if (successfulTileIds?.contains(tileId) == true) {
                 null
             } else {
                 Triple(z, xCoord, yCoord)
@@ -1181,48 +1171,17 @@ class TileDownloadManager(
         }.awaitAll()
 
         val results = mutableListOf<Triple<Int, Pair<Int, Int>, ByteArray>>()
+        val trackingRecords = mutableListOf<DownloadedTile>()
 
         for (attempt in attempts) {
             if (attempt.success && attempt.data != null) {
-                val downloadedTile = DownloadedTile(
-                    id = attempt.tileId,
-                    areaId = areaId,
-                    tileType = TileType.BASEMAP,
-                    downloadTimestamp = System.currentTimeMillis(),
-                    retryCount = 0,
-                    zoom = attempt.z,
-                    tileX = attempt.x,
-                    tileY = attempt.y,
-                    processed = false,
-                    hierarchyLevel = null,
-                    tileIndex = null
-                )
-                downloadedTileDao.insertTile(downloadedTile)
-                successfulTileIds?.add(attempt.tileId)
-                failedTileIds?.remove(attempt.tileId)
-
-                val currentProgress = downloadedCount.incrementAndGet()
-                progressReporter?.updateProgress(
-                    areaId = areaId,
-                    areaName = areaName,
-                    currentStage = DownloadStage.BASEMAP,
-                    stageProgress = currentProgress,
-                    stageTotal = totalTiles,
-                    isCompleted = false,
-                    hasError = false
-                )
-                results.add(Triple(attempt.z, Pair(attempt.x, attempt.y), attempt.data))
-            } else if (attempt.success) {
-                successfulTileIds?.add(attempt.tileId)
-            } else {
-                val retryCount = attempt.previousRetryCount + 1
-                if (retryCount < MAX_RETRY_COUNT) {
-                    val failedTile = DownloadedTile(
+                trackingRecords.add(
+                    DownloadedTile(
                         id = attempt.tileId,
                         areaId = areaId,
                         tileType = TileType.BASEMAP,
                         downloadTimestamp = System.currentTimeMillis(),
-                        retryCount = retryCount,
+                        retryCount = 0,
                         zoom = attempt.z,
                         tileX = attempt.x,
                         tileY = attempt.y,
@@ -1230,7 +1189,31 @@ class TileDownloadManager(
                         hierarchyLevel = null,
                         tileIndex = null
                     )
-                    downloadedTileDao.insertTile(failedTile)
+                )
+                successfulTileIds?.add(attempt.tileId)
+                failedTileIds?.remove(attempt.tileId)
+                downloadedCount.incrementAndGet()
+                results.add(Triple(attempt.z, Pair(attempt.x, attempt.y), attempt.data))
+            } else if (attempt.success) {
+                successfulTileIds?.add(attempt.tileId)
+            } else {
+                val retryCount = attempt.previousRetryCount + 1
+                if (retryCount < MAX_RETRY_COUNT) {
+                    trackingRecords.add(
+                        DownloadedTile(
+                            id = attempt.tileId,
+                            areaId = areaId,
+                            tileType = TileType.BASEMAP,
+                            downloadTimestamp = System.currentTimeMillis(),
+                            retryCount = retryCount,
+                            zoom = attempt.z,
+                            tileX = attempt.x,
+                            tileY = attempt.y,
+                            processed = false,
+                            hierarchyLevel = null,
+                            tileIndex = null
+                        )
+                    )
                     failedTileIds?.add(attempt.tileId)
                     successfulTileIds?.remove(attempt.tileId)
                     Log.w(
@@ -1245,6 +1228,23 @@ class TileDownloadManager(
                 }
                 failedCount.incrementAndGet()
             }
+        }
+
+        // One Room transaction per network batch instead of one transaction per tile.
+        if (trackingRecords.isNotEmpty()) {
+            downloadedTileDao.insertDownloadedTiles(trackingRecords)
+        }
+
+        if (attempts.isNotEmpty()) {
+            progressReporter?.updateProgress(
+                areaId = areaId,
+                areaName = areaName,
+                currentStage = DownloadStage.BASEMAP,
+                stageProgress = downloadedCount.get(),
+                stageTotal = totalTiles,
+                isCompleted = false,
+                hasError = false
+            )
         }
 
         results
@@ -1850,9 +1850,9 @@ class TileDownloadManager(
 
             tileProcessor?.endTileProcessing()
 
-            // Native commit succeeded. Persist resume markers afterwards.
-            for (tileId in committedTileIds) {
-                downloadedTileDao.markTileProcessed(tileId)
+            // Native commit succeeded. Persist resume markers in one Room statement.
+            if (committedTileIds.isNotEmpty()) {
+                downloadedTileDao.markTilesProcessed(committedTileIds)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to commit geocoder batch for area $areaId", e)

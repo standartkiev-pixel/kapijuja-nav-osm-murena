@@ -66,8 +66,8 @@ interface DownloadedTileDao {
     @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId AND tileType = 'BASEMAP' AND retryCount = 0 AND COALESCE(processed, 0) == 0 AND zoom = 14")
     suspend fun getUnprocessedTileCountForArea(areaId: String): Int
 
-    @Query("UPDATE downloaded_tiles SET processed = 1 WHERE id = :id")
-    suspend fun markTileProcessed(id: String)
+    @Query("UPDATE downloaded_tiles SET processed = 1 WHERE id IN (:ids)")
+    suspend fun markTilesProcessed(ids: List<String>)
 
     @Query("SELECT COUNT(*) FROM downloaded_tiles WHERE areaId = :areaId")
     suspend fun getDownloadedTileCountForArea(areaId: String): Int
