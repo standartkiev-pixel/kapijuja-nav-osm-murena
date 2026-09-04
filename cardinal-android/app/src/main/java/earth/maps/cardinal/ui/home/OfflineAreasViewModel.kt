@@ -61,6 +61,7 @@ class OfflineAreasViewModel @Inject constructor(
     val totalTiles = mutableIntStateOf(0)
     val currentAreaName = mutableStateOf("")
     val currentAreaId = mutableStateOf("")
+    val currentStoredBytes = mutableStateOf(0L)
 
     // New unified progress properties
     val unifiedProgress = mutableFloatStateOf(0f) // 0.0 to 1.0
@@ -137,6 +138,7 @@ class OfflineAreasViewModel @Inject constructor(
                     totalTiles.intValue = progress.stageTotal
                     unifiedProgress.floatValue = progress.unifiedProgress
                     currentStage.value = progress.currentStage
+                    currentStoredBytes.value = progress.storedBytes
                 }
             }
         }
@@ -267,6 +269,7 @@ class OfflineAreasViewModel @Inject constructor(
            totalTiles.intValue = 0
            currentAreaName.value = ""
            currentAreaId.value = ""
+           currentStoredBytes.value = 0L
        }
     }
 

@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -112,7 +113,8 @@ class TileDownloadForegroundService : Service() {
         val stageProgress: Int = 0,
         val stageTotal: Int = 0,
         val isCompleted: Boolean = false,
-        val hasError: Boolean = false
+        val hasError: Boolean = false,
+        val storedBytes: Long = 0L
     ) {
         // Unified progress calculation with 3 stages (33.3% each)
         val unifiedProgress: Float get() = calculateUnifiedProgress()
@@ -573,6 +575,7 @@ class TileDownloadForegroundService : Service() {
         isCompleted: Boolean,
         hasError: Boolean
     ) {
+        val offlineDatabase = File(filesDir, "offline_areas.mbtiles")
         _downloadProgress.value = DownloadProgress(
             areaId = areaId,
             areaName = areaName,
@@ -580,7 +583,8 @@ class TileDownloadForegroundService : Service() {
             stageProgress = stageProgress,
             stageTotal = stageTotal,
             isCompleted = isCompleted,
-            hasError = hasError
+            hasError = hasError,
+            storedBytes = offlineDatabase.length()
         )
 
         val isImmediate = isCompleted || hasError

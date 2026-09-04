@@ -238,7 +238,8 @@ fun OfflineAreasScreen(
                         isSelected = selectedArea?.id == area.id,
                         activeStage = if (isActiveDownload) viewModel.currentStage.value else null,
                         activeProgress = if (isActiveDownload) viewModel.downloadProgress.intValue else 0,
-                        activeTotal = if (isActiveDownload) viewModel.totalTiles.intValue else 0
+                        activeTotal = if (isActiveDownload) viewModel.totalTiles.intValue else 0,
+                        activeStoredBytes = if (isActiveDownload) viewModel.currentStoredBytes.value else 0L
                     )
                 }
             }
@@ -300,7 +301,8 @@ fun OfflineAreaItem(
     isSelected: Boolean = false,
     activeStage: DownloadStage? = null,
     activeProgress: Int = 0,
-    activeTotal: Int = 0
+    activeTotal: Int = 0,
+    activeStoredBytes: Long = 0L
 ) {
     Card(
         modifier = Modifier
@@ -401,13 +403,13 @@ fun OfflineAreaItem(
             )
 
             // File size
-            val fileSizeText = if (activeStage != null && area.fileSize == 0L) {
-                "writing…"
+            val displayBytes = if (activeStage != null) {
+                maxOf(activeStoredBytes, area.fileSize)
             } else {
-                formatFileSize(area.fileSize)
+                area.fileSize
             }
             Text(
-                text = stringResource(R.string.file_size, fileSizeText),
+                text = "Offline DB: ${formatFileSize(displayBytes)} (internal app storage)",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 4.dp)
             )
