@@ -10,6 +10,7 @@
 
 package earth.maps.cardinal.routing
 
+import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.Route
 
 /**
@@ -19,10 +20,18 @@ import uniffi.ferrostar.Route
  */
 data class HeavyVehicleAccessApproach(
     val route: Route,
-    val relaxation: HeavyVehicleAccessRelaxation
+    val relaxation: HeavyVehicleAccessRelaxation,
+    /** Exact coordinate requested by the user, before Valhalla snaps it to a road edge. */
+    val requestedDestination: GeographicCoordinate? = null
 )
 
 enum class HeavyVehicleAccessRelaxation {
+    /**
+     * No access rule was relaxed. A second strict route only bridges a different endpoint snap
+     * chosen by Valhalla for an off-road/building/parking destination.
+     */
+    ROUTABLE_SNAP,
+
     /** Ignore mode-specific access tags only; keep length/width/height/weight. */
     ACCESS_ONLY,
 
@@ -32,3 +41,7 @@ enum class HeavyVehicleAccessRelaxation {
     /** Bus-only last-resort fallback: ignore access, weight and length; keep width/height. */
     WEIGHT_AND_LENGTH_RELAXED
 }
+
+
+val HeavyVehicleAccessRelaxation.isCautionary: Boolean
+    get() = this != HeavyVehicleAccessRelaxation.ROUTABLE_SNAP

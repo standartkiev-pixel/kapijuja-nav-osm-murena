@@ -73,8 +73,29 @@ fun TrafficRouteMapOverlay(
         )
     }
 
-    val accessDashSegments = remember(accessApproach) {
-        val approach = accessApproach ?: return@remember emptyList()
+    val snapApproach = accessApproach?.takeIf {
+        it.relaxation == HeavyVehicleAccessRelaxation.ROUTABLE_SNAP
+    }
+    snapApproach?.route?.geometry?.takeIf { it.size >= 2 }?.let { geometry ->
+        Polyline(
+            points = geometry.map { it.toMapLibreLatLng() },
+            color = context.colorResourceHex(R.color.polyline_casing_color),
+            lineWidth = ACCESS_APPROACH_CASING_WIDTH,
+            zIndex = ACCESS_APPROACH_Z_INDEX
+        )
+        Polyline(
+            points = geometry.map { it.toMapLibreLatLng() },
+            color = context.colorResourceHex(R.color.polyline_color),
+            lineWidth = ACCESS_APPROACH_LINE_WIDTH,
+            zIndex = ACCESS_APPROACH_Z_INDEX + 1
+        )
+    }
+
+    val cautionaryApproach = accessApproach?.takeIf {
+        it.relaxation != HeavyVehicleAccessRelaxation.ROUTABLE_SNAP
+    }
+    val accessDashSegments = remember(cautionaryApproach) {
+        val approach = cautionaryApproach ?: return@remember emptyList()
         val style = approach.relaxation.navigationStyle()
         approach.route.geometry
             .takeIf { it.size >= 2 }
@@ -84,7 +105,7 @@ fun TrafficRouteMapOverlay(
             )
             .orEmpty()
     }
-    val accessStyle = accessApproach?.relaxation?.navigationStyle()
+    val accessStyle = cautionaryApproach?.relaxation?.navigationStyle()
     accessDashSegments.forEach { dash ->
         Polyline(
             points = dash.map { it.toMapLibreLatLng() },
@@ -104,16 +125,20 @@ fun TrafficRouteMapOverlay(
         }
     }
 
-    DestinationFlag(accessApproach?.route ?: route)
+    DestinationFlag(
+        accessApproach?.requestedDestination
+            ?: accessApproach?.route?.geometry?.lastOrNull()
+            ?: route?.geometry?.lastOrNull()
+    )
 }
 
 @Composable
 @MapLibreComposable
-private fun DestinationFlag(route: Route?) {
-    val destination = route?.geometry?.lastOrNull() ?: return
+private fun DestinationFlag(destination: GeographicCoordinate?) {
+    val coordinate = destination ?: return
 
     Symbol(
-        center = destination.toMapLibreLatLng(),
+        center = coordinate.toMapLibreLatLng(),
         imageId = R.drawable.ic_destination_flag,
         imageAnchor = ICON_ANCHOR_BOTTOM,
         zIndex = DESTINATION_FLAG_Z_INDEX
@@ -153,6 +178,10 @@ private data class HeavyVehicleAccessNavigationStyle(
 
 private fun HeavyVehicleAccessRelaxation.navigationStyle(): HeavyVehicleAccessNavigationStyle =
     when (this) {
+        // ROUTABLE_SNAP is handled as a solid connector and never reaches this style in normal use.
+        HeavyVehicleAccessRelaxation.ROUTABLE_SNAP ->
+            HeavyVehicleAccessNavigationStyle("#3B81DE", 1.0, 0.0)
+
         HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
             HeavyVehicleAccessNavigationStyle("#FFB700", 7.0, 5.0)
 
@@ -212,6 +241,9 @@ private fun GeographicCoordinate.distanceMetersTo(other: GeographicCoordinate): 
         cos(lat1) * cos(lat2) * sin(deltaLng / 2) * sin(deltaLng / 2)
     return 2 * earthRadiusMeters * atan2(sqrt(a), sqrt(1 - a))
 }
+
+private fun Context.colorResourceHex(resourceId: Int): String =
+    String.format("#%06X", 0xFFFFFF and getColor(resourceId))
 
 private const val TRAFFIC_LINE_WIDTH = 8f
 private const val TRAFFIC_Z_INDEX = 1

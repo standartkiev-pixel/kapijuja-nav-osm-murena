@@ -30,7 +30,7 @@ class HeavyVehicleDefaultsTest {
         assertEquals(4.0, options.height!!, 0.0)
         assertEquals(18.0, options.weight!!, 0.0)
         assertEquals(3, options.axleCount)
-        assertFalse(options.lineBus)
+        assertTrue(options.lineBus)
         assertEquals(0.0, options.useLivingStreets!!, 0.0)
         assertTrue(options.excludeUnpaved == true)
         assertEquals(600.0, options.destinationOnlyPenalty!!, 0.0)

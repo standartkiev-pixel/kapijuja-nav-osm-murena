@@ -740,7 +740,9 @@ fun RouteDisplayHandler(
     }
 }
 
-private fun HeavyVehicleAccessRelaxation.driverWarning(): String = when (this) {
+private fun HeavyVehicleAccessRelaxation.driverWarning(): String? = when (this) {
+    HeavyVehicleAccessRelaxation.ROUTABLE_SNAP -> null
+
     HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
         "Caution: dashed final approach ignores access restrictions; vehicle dimensions remain enforced."
 
@@ -988,19 +990,24 @@ private fun FerrostarRouteResults(
                         }
 
                         routeState.accessApproach?.let { approach ->
-                            Text(
-                                text = approach.relaxation.driverWarning(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = when (approach.relaxation) {
-                                    HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
-                                        MaterialTheme.colorScheme.tertiary
+                            approach.relaxation.driverWarning()?.let { warning ->
+                                Text(
+                                    text = warning,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = when (approach.relaxation) {
+                                        HeavyVehicleAccessRelaxation.ROUTABLE_SNAP ->
+                                            MaterialTheme.colorScheme.onSurfaceVariant
 
-                                    HeavyVehicleAccessRelaxation.WEIGHT_RELAXED,
-                                    HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
-                                        MaterialTheme.colorScheme.error
-                                },
-                                modifier = Modifier.padding(bottom = dimensionResource(dimen.padding))
-                            )
+                                        HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
+                                            MaterialTheme.colorScheme.tertiary
+
+                                        HeavyVehicleAccessRelaxation.WEIGHT_RELAXED,
+                                        HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED ->
+                                            MaterialTheme.colorScheme.error
+                                    },
+                                    modifier = Modifier.padding(bottom = dimensionResource(dimen.padding))
+                                )
+                            }
                         }
 
                         Button(

@@ -204,8 +204,9 @@ class FerrostarWrapper(
 
 
     /**
-     * Builds an optional cautionary final approach when the strict heavy-vehicle route stops on
-     * a nearby legal edge instead of the requested destination.
+     * Builds an optional final connector when Valhalla snaps the requested destination away from
+     * the end of the strict heavy-vehicle route. A connector is cautionary only if the original
+     * strict profile cannot route to the same road point reached by the relaxed access profile.
      *
      * Truck keeps the conservative 120 m access-only fallback.
      *
@@ -227,6 +228,9 @@ class FerrostarWrapper(
             return null
         }
 
+        // Ferrostar waypoints are response waypoints: Valhalla has already snapped them to
+        // routable graph edges. Therefore the distance from this point to requestedDestination
+        // is a snap distance, not proof that an access restriction exists.
         val strictEnd = strictRoute.waypoints.lastOrNull()?.coordinate
             ?: strictRoute.geometry.lastOrNull()
             ?: return null
@@ -243,9 +247,10 @@ class FerrostarWrapper(
             return null
         }
 
-        val baseAccessOptions = previousRouteOptions?.toHeavyVehicleAccessOptions()
+        val strictOptions = previousRouteOptions
             ?: routingProfileRepository.createDefaultOptionsForMode(mode)
-                ?.toHeavyVehicleAccessOptions()
+            ?: return null
+        val baseAccessOptions = strictOptions.toHeavyVehicleAccessOptions()
             ?: return null
 
         val candidates = buildList {
@@ -269,13 +274,12 @@ class FerrostarWrapper(
             timestamp = Clock.System.now().toJavaInstant(),
             speed = null
         )
-        val destinationWaypoint = Waypoint(
-            coordinate = requestedDestination,
-            kind = WaypointKind.BREAK
-        )
 
         for ((accessOptions, relaxation) in candidates) {
-            val route = try {
+            // First find the road endpoint that the permissive access profile associates with
+            // the exact requested coordinate. This is discovery only; it is not yet evidence
+            // that the normal BUS/TRUCK/coach profile is forbidden from using that road.
+            val relaxedRoute = try {
                 createCore(
                     routingOptions = accessOptions,
                     trafficEnabled = false,
@@ -283,7 +287,55 @@ class FerrostarWrapper(
                     costingProfileOverride = ValhallaCostingProfile.Auto
                 ).getRoutes(
                     initialLocation = initialLocation,
-                    waypoints = listOf(destinationWaypoint)
+                    waypoints = listOf(
+                        Waypoint(
+                            coordinate = requestedDestination,
+                            kind = WaypointKind.BREAK
+                        )
+                    )
+                ).firstOrNull()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            } ?: continue
+
+            if (relaxedRoute.distance > maxOffsetMeters) {
+                continue
+            }
+
+            val relaxedStart = relaxedRoute.waypoints.firstOrNull()?.coordinate
+                ?: relaxedRoute.geometry.firstOrNull()
+                ?: continue
+            val relaxedRoadEnd = relaxedRoute.waypoints.lastOrNull()?.coordinate
+                ?: relaxedRoute.geometry.lastOrNull()
+                ?: continue
+
+            // The fallback must actually start on the strict route end. If its origin was
+            // re-snapped elsewhere, do not use it to classify the final road.
+            if (relaxedStart.distanceMetersTo(strictEnd) > ACCESS_APPROACH_MIN_OFFSET_METERS) {
+                continue
+            }
+
+            // Re-route to the *road point* found above with the original strict profile.
+            // - Native Bus stays Bus.
+            // - "Car" inside Bus stays Auto.
+            // - Truck stays Truck.
+            // If this succeeds to the same road point, there was no access relaxation at all:
+            // the original visual gap was only endpoint snapping and must be solid.
+            val strictConnector = try {
+                createCore(
+                    routingOptions = strictOptions,
+                    trafficEnabled = false,
+                    includeForegroundServiceManager = false
+                ).getRoutes(
+                    initialLocation = initialLocation,
+                    waypoints = listOf(
+                        Waypoint(
+                            coordinate = relaxedRoadEnd,
+                            kind = WaypointKind.BREAK
+                        )
+                    )
                 ).firstOrNull()
             } catch (error: CancellationException) {
                 throw error
@@ -291,15 +343,46 @@ class FerrostarWrapper(
                 null
             }
 
-            if (route != null && route.distance <= maxOffsetMeters) {
+            if (strictConnector != null &&
+                strictConnector.distance <= maxOffsetMeters &&
+                strictConnector.connectsRoadPoints(
+                    expectedStart = strictEnd,
+                    expectedEnd = relaxedRoadEnd,
+                    toleranceMeters = ACCESS_APPROACH_MIN_OFFSET_METERS
+                )
+            ) {
                 return HeavyVehicleAccessApproach(
-                    route = route,
-                    relaxation = relaxation
+                    route = strictConnector,
+                    relaxation = HeavyVehicleAccessRelaxation.ROUTABLE_SNAP,
+                    requestedDestination = requestedDestination
                 )
             }
+
+            // Only now is the dashed warning justified: the relaxed route can reach this
+            // approach while the actual strict vehicle profile cannot reach the same road point.
+            return HeavyVehicleAccessApproach(
+                route = relaxedRoute,
+                relaxation = relaxation,
+                requestedDestination = requestedDestination
+            )
         }
 
         return null
+    }
+
+    private fun Route.connectsRoadPoints(
+        expectedStart: GeographicCoordinate,
+        expectedEnd: GeographicCoordinate,
+        toleranceMeters: Double
+    ): Boolean {
+        val actualStart = waypoints.firstOrNull()?.coordinate
+            ?: geometry.firstOrNull()
+            ?: return false
+        val actualEnd = waypoints.lastOrNull()?.coordinate
+            ?: geometry.lastOrNull()
+            ?: return false
+        return actualStart.distanceMetersTo(expectedStart) <= toleranceMeters &&
+            actualEnd.distanceMetersTo(expectedEnd) <= toleranceMeters
     }
 
     fun reprocessLastKnownLocation(core: FerrostarCore = this.core) {

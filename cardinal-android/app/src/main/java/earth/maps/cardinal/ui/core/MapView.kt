@@ -449,31 +449,65 @@ private fun RouteLayer(
                 )
             )
         )
-        val accessStyle = accessApproach.relaxation.previewStyle()
-        LineLayer(
-            id = "heavy_vehicle_access_approach_casing",
-            source = accessSource,
-            color = rgbColor(const(40), const(40), const(40)),
-            dasharray = const(accessStyle.dashArray),
-            width = const(10.dp),
-            opacity = const(0.9f),
-            cap = const(LineCap.Round),
-            join = const(LineJoin.Round),
-        )
-        LineLayer(
-            id = "heavy_vehicle_access_approach",
-            source = accessSource,
-            color = rgbColor(
-                const(accessStyle.red),
-                const(accessStyle.green),
-                const(accessStyle.blue)
-            ),
-            dasharray = const(accessStyle.dashArray),
-            width = const(6.dp),
-            opacity = const(1f),
-            cap = const(LineCap.Round),
-            join = const(LineJoin.Round),
-        )
+
+        if (accessApproach.relaxation == HeavyVehicleAccessRelaxation.ROUTABLE_SNAP) {
+            // Same strict profile reached this road point. Draw it exactly like the ordinary
+            // selected route; no warning semantics are implied.
+            val casing = colorResource(R.color.polyline_casing_color)
+            val line = colorResource(R.color.polyline_color)
+            LineLayer(
+                id = "heavy_vehicle_access_approach_casing",
+                source = accessSource,
+                color = rgbColor(
+                    const((casing.red * 255).toInt()),
+                    const((casing.green * 255).toInt()),
+                    const((casing.blue * 255).toInt())
+                ),
+                width = const(9.dp),
+                opacity = const(1f),
+                cap = const(LineCap.Round),
+                join = const(LineJoin.Round),
+            )
+            LineLayer(
+                id = "heavy_vehicle_access_approach",
+                source = accessSource,
+                color = rgbColor(
+                    const((line.red * 255).toInt()),
+                    const((line.green * 255).toInt()),
+                    const((line.blue * 255).toInt())
+                ),
+                width = const(6.dp),
+                opacity = const(1f),
+                cap = const(LineCap.Round),
+                join = const(LineJoin.Round),
+            )
+        } else {
+            val accessStyle = accessApproach.relaxation.previewStyle()
+            LineLayer(
+                id = "heavy_vehicle_access_approach_casing",
+                source = accessSource,
+                color = rgbColor(const(40), const(40), const(40)),
+                dasharray = const(accessStyle.dashArray),
+                width = const(10.dp),
+                opacity = const(0.9f),
+                cap = const(LineCap.Round),
+                join = const(LineJoin.Round),
+            )
+            LineLayer(
+                id = "heavy_vehicle_access_approach",
+                source = accessSource,
+                color = rgbColor(
+                    const(accessStyle.red),
+                    const(accessStyle.green),
+                    const(accessStyle.blue)
+                ),
+                dasharray = const(accessStyle.dashArray),
+                width = const(6.dp),
+                opacity = const(1f),
+                cap = const(LineCap.Round),
+                join = const(LineJoin.Round),
+            )
+        }
     }
 
     // Route casing layer
@@ -613,6 +647,10 @@ private data class HeavyVehicleAccessPreviewStyle(
 
 private fun HeavyVehicleAccessRelaxation.previewStyle(): HeavyVehicleAccessPreviewStyle =
     when (this) {
+        // ROUTABLE_SNAP is drawn by the solid-route branch above.
+        HeavyVehicleAccessRelaxation.ROUTABLE_SNAP ->
+            HeavyVehicleAccessPreviewStyle(59, 129, 222, emptyList())
+
         HeavyVehicleAccessRelaxation.ACCESS_ONLY ->
             HeavyVehicleAccessPreviewStyle(255, 183, 0, listOf(1.4, 1.1))
 
