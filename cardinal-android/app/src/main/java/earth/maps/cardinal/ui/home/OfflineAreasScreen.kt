@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -92,6 +93,7 @@ fun OfflineAreasScreen(
     var selectedArea by remember { mutableStateOf<OfflineArea?>(null) }
     var showEuropeCountries by remember { mutableStateOf(false) }
     var countryToDownload by remember { mutableStateOf<EuropeanCountryDownloadRegion?>(null) }
+    var countryFullMap by remember { mutableStateOf(false) }
 
     // Format for displaying dates
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
@@ -104,20 +106,29 @@ fun OfflineAreasScreen(
             viewModel = viewModel,
             isDownloading = isDownloading,
             onBack = { showEuropeCountries = false },
-            onCountrySelected = { countryToDownload = it }
+            onCountrySelected = { country, fullMap ->
+                countryToDownload = country
+                countryFullMap = fullMap
+            }
         )
 
         countryToDownload?.let { country ->
+            val selectedMaxZoom = if (countryFullMap) {
+                OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
+            } else {
+                OfflineAreasViewModel.MINIMAL_COUNTRY_MAX_ZOOM
+            }
             CountryDownloadConfirmationDialog(
                 country = country,
+                fullMap = countryFullMap,
                 estimatedTileCount = viewModel.estimateTileCount(
                     country.boundingBox,
                     OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
-                    OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
+                    selectedMaxZoom
                 ),
                 onDismiss = { countryToDownload = null },
                 onDownload = {
-                    viewModel.startCountryDownload(country)
+                    viewModel.startCountryDownload(country, countryFullMap)
                     countryToDownload = null
                     showEuropeCountries = false
                 }
@@ -304,11 +315,21 @@ fun OfflineAreaItem(
                     fontWeight = FontWeight.Bold
                 )
 
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        painter = painterResource(drawable.ic_delete),
-                        contentDescription = stringResource(R.string.delete_area)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (area.id.startsWith("country-")) {
+                        Text("Full map", style = MaterialTheme.typography.bodySmall)
+                        Switch(
+                            checked = area.maxZoom >= OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM,
+                            onCheckedChange = null,
+                            enabled = false
+                        )
+                    }
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            painter = painterResource(drawable.ic_delete),
+                            contentDescription = stringResource(R.string.delete_area)
+                        )
+                    }
                 }
             }
 
@@ -470,9 +491,11 @@ private fun EuropeCountryDownloadScreen(
     viewModel: OfflineAreasViewModel,
     isDownloading: Boolean,
     onBack: () -> Unit,
-    onCountrySelected: (EuropeanCountryDownloadRegion) -> Unit
+    onCountrySelected: (EuropeanCountryDownloadRegion, Boolean) -> Unit
 ) {
     val countries = remember { EuropeanCountryDownloads.regions() }
+    var fullMapCountries by remember { mutableStateOf(setOf<String>()) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -497,36 +520,68 @@ private fun EuropeCountryDownloadScreen(
             )
         }
         Text(
-            text = "Choose a country. The complete country package includes basemap, offline Valhalla routing and offline geocoder data.",
+            text = "Default: navigation map only (z5-z12) with full offline Valhalla routing. " +
+                "Addresses fall back to online Pelias when the offline index has no result. " +
+                "Enable Full map for z13-z14 and offline address indexing.",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(bottom = dimensionResource(dimen.padding))
         )
+
         LazyColumn {
             items(countries, key = { it.countryCode }) { country ->
+                val fullMap = country.countryCode in fullMapCountries
+                val maxZoom = if (fullMap) {
+                    OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
+                } else {
+                    OfflineAreasViewModel.MINIMAL_COUNTRY_MAX_ZOOM
+                }
+                val count = viewModel.estimateTileCount(
+                    country.boundingBox,
+                    OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
+                    maxZoom
+                )
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
-                        .clickable(enabled = !isDownloading) { onCountrySelected(country) },
+                        .clickable(enabled = !isDownloading) {
+                            onCountrySelected(country, fullMap)
+                        },
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(dimensionResource(dimen.padding)),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(country.name, style = MaterialTheme.typography.titleMedium)
-                            Text(country.countryCode, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                text = if (fullMap) {
+                                    "${country.countryCode} · full z14 · offline addresses"
+                                } else {
+                                    "${country.countryCode} · navigation z12 · online addresses"
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text("~$count tiles", style = MaterialTheme.typography.bodySmall)
                         }
-                        val count = viewModel.estimateTileCount(
-                            country.boundingBox,
-                            OfflineAreasViewModel.OFFLINE_AREA_MIN_ZOOM,
-                            OfflineAreasViewModel.OFFLINE_AREA_MAX_ZOOM
-                        )
-                        Text("~$count tiles", style = MaterialTheme.typography.bodySmall)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Full map", style = MaterialTheme.typography.bodySmall)
+                            Switch(
+                                checked = fullMap,
+                                enabled = !isDownloading,
+                                onCheckedChange = { checked ->
+                                    fullMapCountries = if (checked) {
+                                        fullMapCountries + country.countryCode
+                                    } else {
+                                        fullMapCountries - country.countryCode
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -537,6 +592,7 @@ private fun EuropeCountryDownloadScreen(
 @Composable
 private fun CountryDownloadConfirmationDialog(
     country: EuropeanCountryDownloadRegion,
+    fullMap: Boolean,
     estimatedTileCount: Int,
     onDismiss: () -> Unit,
     onDownload: () -> Unit
@@ -546,14 +602,24 @@ private fun CountryDownloadConfirmationDialog(
         title = { Text(country.name) },
         text = {
             Column {
-                Text("Download the entire country as one offline area?")
+                Text(
+                    if (fullMap) {
+                        "Full map: z5-z14, full offline routing and offline address index."
+                    } else {
+                        "Navigation map: z5-z12, full offline routing. Addresses use online Pelias when available."
+                    }
+                )
                 Text(
                     "Estimated basemap tiles: $estimatedTileCount",
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "Routing tiles and geocoder data are downloaded by the existing offline pipeline after the basemap stage.",
+                    if (fullMap) {
+                        "Routing tiles and z14 geocoder data are downloaded by the existing offline pipeline."
+                    } else {
+                        "Valhalla routing tiles remain complete. z13-z14 basemap and offline address indexing are skipped."
+                    },
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall
                 )

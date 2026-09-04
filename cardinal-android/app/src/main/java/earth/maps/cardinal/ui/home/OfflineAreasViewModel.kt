@@ -155,7 +155,7 @@ class OfflineAreasViewModel @Inject constructor(
         }
     }
 
-    fun startCountryDownload(country: EuropeanCountryDownloadRegion) {
+    fun startCountryDownload(country: EuropeanCountryDownloadRegion, fullMap: Boolean) {
         viewModelScope.launch {
             if (permissionRequestManager.shouldRequestNotificationPermission(context)) {
                 permissionRequestManager.requestNotificationPermissionAndWaitForResult()
@@ -164,9 +164,10 @@ class OfflineAreasViewModel @Inject constructor(
             serviceBinder?.getService()?.startCountryDownload(
                 country.boundingBox,
                 OFFLINE_AREA_MIN_ZOOM,
-                OFFLINE_AREA_MAX_ZOOM,
+                if (fullMap) OFFLINE_AREA_MAX_ZOOM else MINIMAL_COUNTRY_MAX_ZOOM,
                 country.name,
-                country.countryCode
+                country.countryCode,
+                fullMap
             )
         }
     }
@@ -260,6 +261,7 @@ class OfflineAreasViewModel @Inject constructor(
 
     companion object {
         const val OFFLINE_AREA_MIN_ZOOM = 5
+        const val MINIMAL_COUNTRY_MAX_ZOOM = 12
         const val OFFLINE_AREA_MAX_ZOOM = 14
     }
 

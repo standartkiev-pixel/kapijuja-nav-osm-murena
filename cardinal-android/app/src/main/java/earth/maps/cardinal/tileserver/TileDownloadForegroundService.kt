@@ -533,10 +533,12 @@ class TileDownloadForegroundService : Service() {
         minZoom: Int,
         maxZoom: Int,
         areaName: String,
-        countryCode: String
+        countryCode: String,
+        fullMap: Boolean
     ) {
         val normalizedCode = countryCode.uppercase().take(2)
-        val areaId = "country-${normalizedCode}-${UUID.randomUUID()}"
+        val mode = if (fullMap) "full" else "min"
+        val areaId = "country-${normalizedCode}-${mode}-${UUID.randomUUID()}"
         tileDownloadManager.downloadTiles(boundingBox, minZoom, maxZoom, areaId, areaName)
     }
 

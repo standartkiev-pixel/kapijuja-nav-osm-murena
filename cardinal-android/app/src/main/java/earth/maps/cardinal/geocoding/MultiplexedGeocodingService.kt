@@ -31,9 +31,12 @@ class MultiplexedGeocodingService(
 ) : GeocodingService(locationRepository) {
 
     override suspend fun geocodeRaw(query: String, focusPoint: LatLng?, autocomplete: Boolean): List<GeocodeResult> {
-        return if (appPreferenceRepository.offlineMode.value) {
-            offlineGeocodingService.geocodeRaw(query, focusPoint, autocomplete)
-        } else {
+        if (!appPreferenceRepository.offlineMode.value) {
+            return onlineGeocodingService.geocodeRaw(query, focusPoint, autocomplete)
+        }
+
+        val offlineResults = offlineGeocodingService.geocodeRaw(query, focusPoint, autocomplete)
+        return offlineResults.ifEmpty {
             onlineGeocodingService.geocodeRaw(query, focusPoint, autocomplete)
         }
     }
@@ -42,9 +45,12 @@ class MultiplexedGeocodingService(
         latitude: Double,
         longitude: Double
     ): List<GeocodeResult> {
-        return if (appPreferenceRepository.offlineMode.value) {
-            offlineGeocodingService.reverseGeocodeRaw(latitude, longitude)
-        } else {
+        if (!appPreferenceRepository.offlineMode.value) {
+            return onlineGeocodingService.reverseGeocodeRaw(latitude, longitude)
+        }
+
+        val offlineResults = offlineGeocodingService.reverseGeocodeRaw(latitude, longitude)
+        return offlineResults.ifEmpty {
             onlineGeocodingService.reverseGeocodeRaw(latitude, longitude)
         }
     }
@@ -54,9 +60,13 @@ class MultiplexedGeocodingService(
         longitude: Double,
         selectedCategories: List<String>
     ): List<GeocodeResult> {
-        return if (appPreferenceRepository.offlineMode.value) {
+        if (!appPreferenceRepository.offlineMode.value) {
+            return onlineGeocodingService.nearbyRaw(latitude, longitude, selectedCategories)
+        }
+
+        val offlineResults =
             offlineGeocodingService.nearbyRaw(latitude, longitude, selectedCategories)
-        } else {
+        return offlineResults.ifEmpty {
             onlineGeocodingService.nearbyRaw(latitude, longitude, selectedCategories)
         }
     }
@@ -66,9 +76,13 @@ class MultiplexedGeocodingService(
         longitude: Double,
         query: String
     ): List<GeocodeResult> {
-        return if (appPreferenceRepository.offlineMode.value) {
+        if (!appPreferenceRepository.offlineMode.value) {
+            return onlineGeocodingService.nearbySearchRaw(latitude, longitude, query)
+        }
+
+        val offlineResults =
             offlineGeocodingService.nearbySearchRaw(latitude, longitude, query)
-        } else {
+        return offlineResults.ifEmpty {
             onlineGeocodingService.nearbySearchRaw(latitude, longitude, query)
         }
     }
