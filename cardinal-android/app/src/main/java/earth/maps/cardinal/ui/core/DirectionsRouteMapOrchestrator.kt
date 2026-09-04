@@ -58,12 +58,12 @@ internal fun DirectionsRouteMapOrchestrator(
                 allRoutes,
                 trafficAvailable,
                 etaCorrectionFactor,
-                accessApproachRoute ->
+                accessApproach ->
             state.currentRoute = routeUpdate
             state.allRoutes = allRoutes
             state.trafficAvailable = trafficAvailable
             state.etaCorrectionFactor = etaCorrectionFactor
-            state.accessApproachRoute = accessApproachRoute
+            state.accessApproach = accessApproach
         }
     )
 
@@ -357,7 +357,7 @@ private fun ClearDirectionsRouteStateOnDispose(state: AppContentState) {
             state.allRoutes = emptyList()
             state.trafficAvailable = false
             state.etaCorrectionFactor = 1.0
-            state.accessApproachRoute = null
+            state.accessApproach = null
             state.selectedRouteIndex = null
         }
     }
