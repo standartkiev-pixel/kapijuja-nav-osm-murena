@@ -19,6 +19,7 @@
 package earth.maps.cardinal.data
 
 import androidx.annotation.VisibleForTesting
+import earth.maps.cardinal.routing.HeavyVehicleAccessApproach
 import earth.maps.cardinal.ui.directions.DirectionUiError
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,7 +41,7 @@ data class RouteState(
     val lastTrafficRefreshMs: Long? = null,
     val etaCorrectionFactor: Double = 1.0,
     val rerouteSuggestion: TrafficRerouteSuggestion? = null,
-    val accessApproachRoute: Route? = null,
+    val accessApproach: HeavyVehicleAccessApproach? = null,
 )
 
 class RouteStateRepository {
@@ -56,7 +57,7 @@ class RouteStateRepository {
         trafficAvailable: Boolean = _routeState.value.isTrafficAvailable,
         lastTrafficRefreshMillis: Long? = _routeState.value.lastTrafficRefreshMs,
         etaCorrectionFactor: Double = _routeState.value.etaCorrectionFactor,
-        accessApproachRoute: Route? = null
+        accessApproach: HeavyVehicleAccessApproach? = null
     ) {
         _routeState.value = _routeState.value.copy(
             routes = routes,
@@ -67,7 +68,7 @@ class RouteStateRepository {
             lastTrafficRefreshMs = lastTrafficRefreshMillis,
             etaCorrectionFactor = etaCorrectionFactor,
             rerouteSuggestion = null,
-            accessApproachRoute = accessApproachRoute
+            accessApproach = accessApproach
         )
     }
 
