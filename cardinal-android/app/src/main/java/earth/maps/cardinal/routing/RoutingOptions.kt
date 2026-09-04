@@ -255,6 +255,85 @@ data class BusRoutingOptions(
 }
 
 /**
+ * Restricted-access last-mile profile for full-size Truck/Bus vehicles.
+ *
+ * This deliberately uses Valhalla AUTO access semantics with ignore_access=true so the
+ * dashed approach can cross mode-specific access bans when the destination is otherwise
+ * unreachable. Hard restrictions are NOT disabled: ignore_restrictions=false keeps
+ * dimensional/weight/conditional restrictions, ignore_oneways=false keeps directionality,
+ * and ignore_closures=false keeps closures.
+ */
+data class HeavyVehicleAccessRoutingOptions(
+    override val costingType: String = AutoRoutingOptions.COSTING_TYPE_AUTO,
+
+    override val maneuverPenalty: Double? = 45.0,
+    override val gateCost: Double? = AutoRoutingOptions.DEFAULT_GATE_COST,
+    override val tollBoothCost: Double? = AutoRoutingOptions.DEFAULT_TOLL_BOOTH_COST,
+    override val privateAccessPenalty: Double? = 600.0,
+
+    override val useHighways: Double? = 0.8,
+    override val useTolls: Double? = null,
+    override val useLivingStreets: Double? = 0.0,
+    override val useTracks: Double? = 0.0,
+
+    override val ignoreClosures: Boolean? = false,
+    override val ignoreRestrictions: Boolean? = false,
+    override val ignoreOneWays: Boolean? = false,
+    override val ignoreAccess: Boolean? = true,
+
+    override val excludeUnpaved: Boolean? = true,
+    override val excludeCashOnlyTolls: Boolean? = null,
+
+    val servicePenalty: Double? = 600.0,
+    val serviceFactor: Double? = 8.0,
+    val alleyFactor: Double? = 12.0,
+    val destinationOnlyPenalty: Double? = 0.0,
+
+    val length: Double?,
+    val width: Double?,
+    val height: Double?,
+    val weight: Double?,
+) : RoutingOptions(), AutoOptions
+
+fun RoutingOptions.toHeavyVehicleAccessOptions(): HeavyVehicleAccessRoutingOptions? = when (this) {
+    is TruckRoutingOptions -> HeavyVehicleAccessRoutingOptions(
+        maneuverPenalty = maneuverPenalty,
+        gateCost = gateCost,
+        tollBoothCost = tollBoothCost,
+        privateAccessPenalty = privateAccessPenalty ?: 600.0,
+        useHighways = useHighways,
+        useTolls = useTolls,
+        useLivingStreets = 0.0,
+        useTracks = 0.0,
+        excludeUnpaved = excludeUnpaved,
+        excludeCashOnlyTolls = excludeCashOnlyTolls,
+        length = length,
+        width = width,
+        height = height,
+        weight = weight,
+    )
+
+    is BusRoutingOptions -> HeavyVehicleAccessRoutingOptions(
+        maneuverPenalty = maneuverPenalty,
+        gateCost = gateCost,
+        tollBoothCost = tollBoothCost,
+        privateAccessPenalty = privateAccessPenalty ?: 600.0,
+        useHighways = useHighways,
+        useTolls = useTolls,
+        useLivingStreets = 0.0,
+        useTracks = 0.0,
+        excludeUnpaved = excludeUnpaved,
+        excludeCashOnlyTolls = excludeCashOnlyTolls,
+        length = length,
+        width = width,
+        height = height,
+        weight = weight,
+    )
+
+    else -> null
+}
+
+/**
  * Routing options for motor scooter mode.
  */
 data class MotorScooterRoutingOptions(
