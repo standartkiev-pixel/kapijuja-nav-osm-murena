@@ -53,11 +53,17 @@ internal fun DirectionsRouteMapOrchestrator(
         cameraState = state.cameraState,
         appPreferences = appPreferences,
         padding = polylinePadding,
-        onRouteUpdate = { routeUpdate, allRoutes, trafficAvailable, etaCorrectionFactor ->
+        onRouteUpdate = {
+                routeUpdate,
+                allRoutes,
+                trafficAvailable,
+                etaCorrectionFactor,
+                accessApproachRoute ->
             state.currentRoute = routeUpdate
             state.allRoutes = allRoutes
             state.trafficAvailable = trafficAvailable
             state.etaCorrectionFactor = etaCorrectionFactor
+            state.accessApproachRoute = accessApproachRoute
         }
     )
 
@@ -351,6 +357,7 @@ private fun ClearDirectionsRouteStateOnDispose(state: AppContentState) {
             state.allRoutes = emptyList()
             state.trafficAvailable = false
             state.etaCorrectionFactor = 1.0
+            state.accessApproachRoute = null
             state.selectedRouteIndex = null
         }
     }
