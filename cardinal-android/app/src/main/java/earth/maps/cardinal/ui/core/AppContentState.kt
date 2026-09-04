@@ -52,6 +52,7 @@ class AppContentState(
     allRoutes: List<Route> = emptyList(),
     trafficAvailable: Boolean = false,
     etaCorrectionFactor: Double = 1.0,
+    accessApproachRoute: Route? = null,
     currentTransitItinerary: Itinerary? = null,
     highlightedTransitLegIndex: Int? = null,
     screenHeightDp: Dp = 0.dp,
@@ -66,6 +67,7 @@ class AppContentState(
     var allRoutes by mutableStateOf(allRoutes)
     var trafficAvailable by mutableStateOf(trafficAvailable)
     var etaCorrectionFactor by mutableStateOf(etaCorrectionFactor)
+    var accessApproachRoute by mutableStateOf(accessApproachRoute)
     var currentTransitItinerary by mutableStateOf(currentTransitItinerary)
     var highlightedTransitLegIndex by mutableStateOf(highlightedTransitLegIndex)
     var screenHeightDp by mutableStateOf(screenHeightDp)
