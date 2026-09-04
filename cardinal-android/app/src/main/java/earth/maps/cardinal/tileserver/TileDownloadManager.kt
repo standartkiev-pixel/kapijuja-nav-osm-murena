@@ -998,11 +998,11 @@ class TileDownloadManager(
 
         // MBTiles references are the source of truth for already installed graph files.
         // Mirror them into Room so resume/progress logic remains truthful after app restarts.
-        val existingTiles = loadExistingValhallaTiles(db, areaId)
-            .filterTo(mutableSetOf()) { (level, index) ->
-                val path = loadValhallaTilePath(db, level, index, areaId)
-                path != null && File(path).isFile && File(path).length() > 0L
-            }
+        val existingPaths = loadExistingValhallaTilePaths(db, areaId)
+        val existingTiles = existingPaths
+            .filterValues { path -> File(path).isFile && File(path).length() > 0L }
+            .keys
+            .toMutableSet()
 
         if (existingTiles.isNotEmpty()) {
             downloadedTileDao.insertDownloadedTiles(
@@ -1149,18 +1149,20 @@ class TileDownloadManager(
         return result
     }
 
-    private fun loadValhallaTilePath(
+    private fun loadExistingValhallaTilePaths(
         db: SQLiteDatabase,
-        hierarchyLevel: Int,
-        tileIndex: Int,
         areaId: String
-    ): String? {
+    ): Map<Pair<Int, Int>, String> {
+        val result = mutableMapOf<Pair<Int, Int>, String>()
         db.rawQuery(
-            "SELECT file_path FROM valhalla_tiles WHERE hierarchy_level = ? AND tile_index = ? AND area_id = ? LIMIT 1",
-            arrayOf(hierarchyLevel.toString(), tileIndex.toString(), areaId)
+            "SELECT hierarchy_level, tile_index, file_path FROM valhalla_tiles WHERE area_id = ?",
+            arrayOf(areaId)
         ).use { cursor ->
-            return if (cursor.moveToFirst()) cursor.getString(0) else null
+            while (cursor.moveToNext()) {
+                result[Pair(cursor.getInt(0), cursor.getInt(1))] = cursor.getString(2)
+            }
         }
+        return result
     }
 
     /**
@@ -1332,7 +1334,6 @@ class TileDownloadManager(
                         totalBytesRead += bytesRead
                     }
                     output.flush()
-                    output.fd.sync()
                     totalBytesRead
                 }
             }
