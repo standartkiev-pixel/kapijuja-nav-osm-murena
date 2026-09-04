@@ -210,6 +210,7 @@ class FerrostarWrapper(
      * dimensions/weight and keeps ignore_restrictions/ignore_oneways/ignore_closures false.
      * It is intentionally limited to a short final approach.
      */
+    @OptIn(ExperimentalTime::class)
     suspend fun getAccessApproachRoute(
         strictRoute: Route,
         requestedDestination: GeographicCoordinate
