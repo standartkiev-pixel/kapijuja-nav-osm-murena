@@ -261,9 +261,6 @@ class TileDownloadManager(
                 processedTiles, totalTilesToProcess
             )
 
-            tileProcessor?.beginTileProcessing()
-            Log.d(TAG, "Tile processor initialized")
-
             basemapResult = downloadBasemapPhaseIfNeeded(
                 resumePhase, boundingBox, minZoom,
                 maxZoom, areaId, name, totalValhallaTiles
@@ -289,8 +286,6 @@ class TileDownloadManager(
             Log.e(TAG, "Error downloading tiles for area $name (ID: $areaId)", e)
             handleDownloadError(areaId, name)
         } finally {
-            tileProcessor?.endTileProcessing()
-            Log.d(TAG, "Tile processing completed")
             closeDatabaseSafely(db)
         }
     }
@@ -460,6 +455,12 @@ class TileDownloadManager(
                 "Basemap download complete: ${basemapResult.first} new tiles downloaded, ${basemapResult.second} failed"
             )
 
+            if (basemapResult.second > 0) {
+                throw IllegalStateException(
+                    "Basemap download incomplete: ${basemapResult.second} tiles failed"
+                )
+            }
+
             updateAreaStatus(areaId, DownloadStatus.DOWNLOADING_VALHALLA)
 
             // Update progress to show basemap completion
@@ -498,6 +499,12 @@ class TileDownloadManager(
                 TAG,
                 "Valhalla download complete: ${valhallaResult.first} new tiles downloaded, ${valhallaResult.second} failed"
             )
+
+            if (valhallaResult.second > 0) {
+                throw IllegalStateException(
+                    "Valhalla download incomplete: ${valhallaResult.second} tiles failed"
+                )
+            }
 
             return valhallaResult
         } else {
@@ -1804,26 +1811,45 @@ class TileDownloadManager(
     private suspend fun processTileBatch(
         tileBatch: List<Triple<Int, Pair<Int, Int>, ByteArray>>, areaId: String
     ): Pair<Int, Int> {
+        if (tileBatch.isEmpty()) return Pair(0, 0)
+
         var processedCount = 0
         var failedCount = 0
+        val committedTileIds = mutableListOf<String>()
 
-        for ((zoom, coords, data) in tileBatch) {
-            try {
-                val (x, y) = coords
-                val tmsY = (2.0.pow(zoom.toDouble()) - 1 - y).toInt()
-                tileProcessor?.processTile(data, zoom, x, tmsY)
-                val tileId = "basemap_${areaId}_${zoom}_${x}_${tmsY}"
-                downloadedTileDao.markTileProcessed(tileId)
-                processedCount++
-                Log.v(TAG, "Processed tile $zoom/$x/$y for area $areaId")
-            } catch (e: Exception) {
-                Log.w(
-                    TAG,
-                    "Error processing tile $zoom/${coords.first}/${coords.second} for area $areaId",
-                    e
-                )
-                failedCount++
+        try {
+            // Commit the geocoder in bounded batches. Room's processed flag is written only
+            // after the native index commit succeeds, so an interrupted batch is safely retried.
+            tileProcessor?.beginTileProcessing()
+
+            for ((zoom, coords, data) in tileBatch) {
+                try {
+                    val (x, y) = coords
+                    val xyzY = (2.0.pow(zoom.toDouble()) - 1 - y).toInt()
+                    tileProcessor?.processTile(data, zoom, x, xyzY)
+                    committedTileIds.add("basemap_${areaId}_${zoom}_${x}_${xyzY}")
+                    processedCount++
+                    Log.v(TAG, "Processed tile $zoom/$x/$y for area $areaId")
+                } catch (e: Exception) {
+                    Log.w(
+                        TAG,
+                        "Error processing tile $zoom/${coords.first}/${coords.second} for area $areaId",
+                        e
+                    )
+                    failedCount++
+                }
             }
+
+            tileProcessor?.endTileProcessing()
+
+            // Native commit succeeded. Persist resume markers afterwards.
+            for (tileId in committedTileIds) {
+                downloadedTileDao.markTileProcessed(tileId)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to commit geocoder batch for area $areaId", e)
+            // Nothing from this batch is marked processed; all of it is safe to retry.
+            return Pair(0, tileBatch.size)
         }
 
         return Pair(processedCount, failedCount)
