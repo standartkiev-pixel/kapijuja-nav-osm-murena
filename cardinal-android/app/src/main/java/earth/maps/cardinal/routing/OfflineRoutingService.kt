@@ -23,6 +23,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
 import com.valhalla.valhalla.ValhallaActor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,9 +54,10 @@ class OfflineRoutingService(context: Context) : RoutingService {
         request: String
     ): String {
         try {
+            val offlineRequest = normalizeOfflineCosting(request)
             val valhallaResponse = coroutineScope.async {
                 valhallaActor.route(
-                    request
+                    offlineRequest
                 )
             }.await()
 
@@ -65,6 +67,31 @@ class OfflineRoutingService(context: Context) : RoutingService {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to route", e)
             throw e // Re-throw because the clients catch these and show them to the user, real handy for a pre-prod app like this.
+        }
+    }
+
+    /**
+     * Hosted Valhalla services may expose traffic-specific costing aliases such as
+     * auto_traffic_premium, bus_traffic_premium and truck_traffic_premium. The embedded
+     * Valhalla actor has no such costing methods; its downloaded routing tiles are used with
+     * the corresponding base costing instead. Keep costing_options unchanged because those
+     * are already keyed by the base profile (auto/bus/truck).
+     */
+    private fun normalizeOfflineCosting(request: String): String {
+        return try {
+            val root = JsonParser.parseString(request).asJsonObject
+            val costing = root.get("costing")?.asString ?: return request
+            val offlineCosting = when {
+                costing == "auto_traffic" || costing.startsWith("auto_traffic_") -> "auto"
+                costing == "bus_traffic" || costing.startsWith("bus_traffic_") -> "bus"
+                costing == "truck_traffic" || costing.startsWith("truck_traffic_") -> "truck"
+                else -> return request
+            }
+            root.addProperty("costing", offlineCosting)
+            root.toString()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not normalize offline costing; using original request", e)
+            request
         }
     }
 
