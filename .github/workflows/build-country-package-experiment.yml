@@ -1,0 +1,68 @@
+name: Build Poland country package experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      country:
+        description: Country package to build
+        required: true
+        default: PL
+        type: choice
+        options:
+          - PL
+  push:
+    branches:
+      - country-package-experiment-2026-09-04
+    paths:
+      - 'tools/country_package/**'
+      - 'cardinal-android/app/src/main/assets/europe_country_boundaries.json'
+      - '.github/workflows/build-country-package-experiment.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: country-package-experiment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-country-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build one-file Poland minimal package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          COUNTRY="${{ inputs.country || 'PL' }}"
+          python tools/country_package/build_country_package.py \
+            --country "$COUNTRY" \
+            --output-dir country-package-output
+
+      - name: Show package sizes and hashes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find country-package-output -maxdepth 1 -type f -print -exec ls -lh {} \;
+          sha256sum country-package-output/*.zip
+
+      - name: Upload country package experiment
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kapijuja-PL-minimal-country-package-experiment
+          path: |
+            country-package-output/Kapijuja-PL-minimal-country-package.zip
+            country-package-output/Kapijuja-PL-minimal-country-package.zip.sha256
+            country-package-output/PL-minimal-work/manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
