@@ -39,6 +39,7 @@ import earth.maps.cardinal.data.navigation.CustomDeviationDetector
 import earth.maps.cardinal.data.navigation.FerrostarRouteDeviationDetector
 import earth.maps.cardinal.data.navigation.PolylineDistanceCalculator
 import earth.maps.cardinal.data.room.RoutingProfileRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -274,7 +275,7 @@ class FerrostarWrapper(
         )
 
         for ((accessOptions, relaxation) in candidates) {
-            val route = runCatching {
+            val route = try {
                 createCore(
                     routingOptions = accessOptions,
                     trafficEnabled = false,
@@ -284,7 +285,11 @@ class FerrostarWrapper(
                     initialLocation = initialLocation,
                     waypoints = listOf(destinationWaypoint)
                 ).firstOrNull()
-            }.getOrNull()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
 
             if (route != null) {
                 return HeavyVehicleAccessApproach(
