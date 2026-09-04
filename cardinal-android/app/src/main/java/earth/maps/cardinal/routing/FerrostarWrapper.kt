@@ -211,8 +211,8 @@ class FerrostarWrapper(
      * Bus may bridge up to 600 m. It first ignores mode-specific access only while preserving
      * length/width/height/weight. Only if that cannot produce a route do we try progressively
      * more permissive BUS-only fallbacks:
-     *  1. ignore weight, preserving length/width/height;
-     *  2. as a last resort ignore weight and length, preserving width/height.
+     *  1. set effective weight to 0 for restriction matching, preserving length/width/height;
+     *  2. as a last resort set effective weight and length to 0, preserving width/height.
      *
      * We never set ignore_restrictions=true, so maxheight/maxwidth and other hard restrictions
      * remain active in every tier. One-way direction and closures remain active as well.
@@ -251,11 +251,11 @@ class FerrostarWrapper(
             add(baseAccessOptions to HeavyVehicleAccessRelaxation.ACCESS_ONLY)
             if (mode == RoutingMode.BUS) {
                 add(
-                    baseAccessOptions.copy(weight = null) to
+                    baseAccessOptions.copy(weight = 0.0) to
                         HeavyVehicleAccessRelaxation.WEIGHT_RELAXED
                 )
                 add(
-                    baseAccessOptions.copy(weight = null, length = null) to
+                    baseAccessOptions.copy(weight = 0.0, length = 0.0) to
                         HeavyVehicleAccessRelaxation.WEIGHT_AND_LENGTH_RELAXED
                 )
             }
