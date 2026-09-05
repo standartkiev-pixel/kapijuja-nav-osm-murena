@@ -218,6 +218,36 @@ def fetch_bytes(url: str) -> bytes:
     raise RuntimeError(f"Failed after {HTTP_ATTEMPTS} attempts: {url}: {last_error}")
 
 
+def fetch_optional_bytes(url: str) -> tuple[bytes | None, int]:
+    """
+    Fetch an object that may legitimately not exist in Murena object storage.
+    Some storage/CDN configurations return 403 instead of 404 for a missing key.
+    We only treat 403/404 as 'not published'; transport/5xx errors still retry/fail.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, HTTP_ATTEMPTS + 1):
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"HTTP {response.status}")
+                data = response.read()
+                if not data:
+                    raise RuntimeError("empty response")
+                return data, response.status
+        except urllib.error.HTTPError as exc:
+            if exc.code in (403, 404):
+                return None, exc.code
+            last_error = exc
+        except Exception as exc:
+            last_error = exc
+
+        if attempt < HTTP_ATTEMPTS:
+            time.sleep(min(8.0, 0.5 * (2 ** (attempt - 1))))
+
+    raise RuntimeError(f"Failed after {HTTP_ATTEMPTS} attempts: {url}: {last_error}")
+
+
 def initialize_mbtiles(path: Path, country_name: str, min_zoom: int, max_zoom: int) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.execute("PRAGMA journal_mode=WAL")
@@ -312,20 +342,27 @@ def build_basemap(
     return mbtiles
 
 
-def build_valhalla(workdir: Path, tiles: Sequence[Tuple[int, int]]) -> Path:
+def build_valhalla(
+    workdir: Path,
+    tiles: Sequence[Tuple[int, int]],
+) -> tuple[Path, int, int, dict[int, int]]:
     root = workdir / "valhalla_tiles"
     root.mkdir(parents=True, exist_ok=True)
 
     pending: List[Tuple[int, int]] = []
-    completed = 0
+    installed = 0
     for level, index in tiles:
         target = root / valhalla_relative_path(level, index)
         if target.is_file() and target.stat().st_size > 0:
-            completed += 1
+            installed += 1
         else:
             pending.append((level, index))
 
-    print(f"Valhalla: {len(tiles)} expected, {completed} already present, {len(pending)} pending", flush=True)
+    print(
+        f"Valhalla candidates: {len(tiles)}, already installed: {installed}, "
+        f"to probe/download: {len(pending)}",
+        flush=True,
+    )
 
     def worker(tile: Tuple[int, int]):
         level, index = tile
@@ -334,18 +371,46 @@ def build_valhalla(workdir: Path, tiles: Sequence[Tuple[int, int]]) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = Path(str(target) + ".part")
         url = f"{VALHALLA_BASE_URL}/{relative.as_posix()}"
-        data = fetch_bytes(url)
+
+        data, status = fetch_optional_bytes(url)
+        if data is None:
+            partial.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            return level, index, 0, status
+
         partial.write_bytes(data)
         os.replace(partial, target)
-        return level, index, len(data)
+        return level, index, len(data), 200
+
+    completed_probes = 0
+    missing = 0
+    missing_by_status: dict[int, int] = {}
+    downloaded = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=VALHALLA_WORKERS) as executor:
-        for _level, _index, _size in executor.map(worker, pending, chunksize=1):
-            completed += 1
-            if completed % 50 == 0 or completed == len(tiles):
-                print(f"Valhalla progress: {completed}/{len(tiles)}", flush=True)
+        for _level, _index, size, status in executor.map(worker, pending, chunksize=1):
+            completed_probes += 1
+            if status == 200:
+                downloaded += 1
+                installed += 1
+            else:
+                missing += 1
+                missing_by_status[status] = missing_by_status.get(status, 0) + 1
 
-    return root
+            if completed_probes % 50 == 0 or completed_probes == len(pending):
+                print(
+                    f"Valhalla probe progress: {completed_probes}/{len(pending)}; "
+                    f"installed={installed}; absent={missing}; "
+                    f"statuses={missing_by_status}",
+                    flush=True,
+                )
+
+    print(
+        f"Valhalla published graph tiles: {installed}/{len(tiles)} candidates; "
+        f"absent objects: {missing}; status breakdown: {missing_by_status}",
+        flush=True,
+    )
+    return root, installed, missing, missing_by_status
 
 
 def directory_size(path: Path) -> int:
@@ -367,7 +432,10 @@ def create_package(
     mbtiles: Path,
     valhalla_root: Path,
     basemap_count: int,
-    valhalla_count: int,
+    valhalla_candidate_count: int,
+    valhalla_installed_count: int,
+    valhalla_absent_count: int,
+    valhalla_absent_statuses: dict[int, int],
 ) -> Path:
     package_dir = output_dir / f"{country_code}-minimal-work"
     manifest_path = package_dir / "manifest.json"
@@ -386,7 +454,12 @@ def create_package(
         },
         "routing": {
             "directory": "valhalla_tiles",
-            "tile_count": valhalla_count,
+            "candidate_tile_count": valhalla_candidate_count,
+            "installed_tile_count": valhalla_installed_count,
+            "absent_object_count": valhalla_absent_count,
+            "absent_http_statuses": {
+                str(code): count for code, count in sorted(valhalla_absent_statuses.items())
+            },
             "bytes": directory_size(valhalla_root),
             "source": VALHALLA_BASE_URL,
         },
@@ -453,7 +526,12 @@ def main() -> int:
         config["min_zoom"],
         config["max_zoom"],
     )
-    valhalla_root = build_valhalla(workdir, routing_tiles)
+    (
+        valhalla_root,
+        valhalla_installed_count,
+        valhalla_absent_count,
+        valhalla_absent_statuses,
+    ) = build_valhalla(workdir, routing_tiles)
     create_package(
         output_dir,
         args.country,
@@ -462,6 +540,9 @@ def main() -> int:
         valhalla_root,
         len(map_tiles),
         len(routing_tiles),
+        valhalla_installed_count,
+        valhalla_absent_count,
+        valhalla_absent_statuses,
     )
     return 0
 
