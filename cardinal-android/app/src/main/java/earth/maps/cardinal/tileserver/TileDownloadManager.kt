@@ -74,6 +74,17 @@ class TileDownloadManager(
     }
     private val countryTileMask by lazy { CountryTileMask(context) }
 
+    private enum class ValhallaFetchStatus {
+        SUCCESS,
+        ABSENT,
+        FAILURE
+    }
+
+    private data class ValhallaFetchResult(
+        val status: ValhallaFetchStatus,
+        val filePath: String? = null,
+        val httpStatus: Int? = null
+    )
 
     companion object {
         private const val MAX_BASEMAP_ZOOM = 14
@@ -85,6 +96,7 @@ class TileDownloadManager(
         private const val MAX_CONCURRENT_VALHALLA_DOWNLOADS = 8
         private const val GEOCODER_BATCH_SIZE = 200
         private const val MAX_RETRY_COUNT = 3
+        private const val VALHALLA_ABSENT_RETRY_MARKER = 999
         private const val COUNTRY_AREA_PREFIX = "country-"
 
         fun countryCodeFromAreaId(areaId: String?): String? {
@@ -1013,6 +1025,16 @@ class TileDownloadManager(
         }
 
         val completedTiles = existingTiles.toMutableSet()
+        val knownAbsentTiles = downloadedTileDao
+            .getDownloadedTilesForAreaAndType(areaId, TileType.VALHALLA)
+            .asSequence()
+            .filter { it.retryCount == VALHALLA_ABSENT_RETRY_MARKER }
+            .mapNotNull { tile ->
+                val level = tile.hierarchyLevel
+                val index = tile.tileIndex
+                if (level != null && index != null) Pair(level, index) else null
+            }
+            .toMutableSet()
         val globalTiles = loadGlobalValhallaTilePaths(db)
 
         // Reuse graph files already downloaded for a neighbouring country. This only creates
@@ -1040,7 +1062,7 @@ class TileDownloadManager(
                 areaId = areaId,
                 areaName = areaName,
                 currentStage = DownloadStage.VALHALLA,
-                stageProgress = completedTiles.size,
+                stageProgress = completedTiles.size + knownAbsentTiles.size,
                 stageTotal = totalValhallaTiles,
                 isCompleted = false,
                 hasError = false
@@ -1052,7 +1074,9 @@ class TileDownloadManager(
         // atomically on disk, then its references are committed in one SQLite transaction.
         var attempt = 1
         while (attempt <= MAX_RETRY_COUNT) {
-            val unresolved = expectedTiles.filterNot { it in completedTiles }
+            val unresolved = expectedTiles.filterNot {
+                it in completedTiles || it in knownAbsentTiles
+            }
             if (unresolved.isEmpty()) break
 
             if (attempt > 1) {
@@ -1073,8 +1097,18 @@ class TileDownloadManager(
                 }
 
                 val successful = results.mapNotNull { (level, index, result) ->
-                    val (success, path) = result
-                    if (success && path != null) Triple(level, index, path) else null
+                    if (result.status == ValhallaFetchStatus.SUCCESS && result.filePath != null) {
+                        Triple(level, index, result.filePath)
+                    } else {
+                        null
+                    }
+                }
+                val absent = results.mapNotNull { (level, index, result) ->
+                    if (result.status == ValhallaFetchStatus.ABSENT) {
+                        Pair(level, index)
+                    } else {
+                        null
+                    }
                 }
 
                 if (successful.isNotEmpty()) {
@@ -1090,11 +1124,29 @@ class TileDownloadManager(
                     downloadedCount += successful.size
                 }
 
+                if (absent.isNotEmpty()) {
+                    downloadedTileDao.insertDownloadedTiles(
+                        absent.map { (level, index) ->
+                            DownloadedTile.forValhallaTile(
+                                areaId = areaId,
+                                hierarchyLevel = level,
+                                tileIndex = index,
+                                retryCount = VALHALLA_ABSENT_RETRY_MARKER
+                            )
+                        }
+                    )
+                    knownAbsentTiles.addAll(absent)
+                    Log.d(
+                        TAG,
+                        "Confirmed ${absent.size} unpublished Valhalla graph objects; treating them as intentionally absent"
+                    )
+                }
+
                 progressReporter?.updateProgress(
                     areaId = areaId,
                     areaName = areaName,
                     currentStage = DownloadStage.VALHALLA,
-                    stageProgress = completedTiles.size,
+                    stageProgress = completedTiles.size + knownAbsentTiles.size,
                     stageTotal = totalValhallaTiles,
                     isCompleted = false,
                     hasError = false
@@ -1104,11 +1156,15 @@ class TileDownloadManager(
             attempt++
         }
 
-        val unresolvedCount = expectedTiles.count { it !in completedTiles }
+        val unresolvedCount = expectedTiles.count {
+            it !in completedTiles && it !in knownAbsentTiles
+        }
         performFinalValhallaConsistencyCheck(db, areaId)
         Log.d(
             TAG,
-            "Valhalla routing graph ready: ${completedTiles.size}/$totalValhallaTiles, unresolved: $unresolvedCount"
+            "Valhalla routing graph ready: installed=${completedTiles.size}, " +
+                "absent=${knownAbsentTiles.size}, candidates=$totalValhallaTiles, " +
+                "unresolved=$unresolvedCount"
         )
         return Pair(downloadedCount, unresolvedCount)
     }
@@ -1225,10 +1281,16 @@ class TileDownloadManager(
             return null // Skip tile (not a failure, just already exists)
         }
 
-        val (success, filePath) = downloadValhallaTile(hierarchyLevel, tileIndex)
-        return if (success && filePath != null) {
+        val result = downloadValhallaTile(hierarchyLevel, tileIndex)
+        return if (result.status == ValhallaFetchStatus.SUCCESS && result.filePath != null) {
             // Store tile reference in database
-            storeValhallaTileReference(db, hierarchyLevel, tileIndex, filePath, areaId)
+            storeValhallaTileReference(
+                db,
+                hierarchyLevel,
+                tileIndex,
+                result.filePath,
+                areaId
+            )
 
             // Update service progress
             progressReporter?.updateProgress(
@@ -1242,8 +1304,10 @@ class TileDownloadManager(
             )
 
             true // Successfully downloaded
+        } else if (result.status == ValhallaFetchStatus.ABSENT) {
+            null // No graph object is published for this grid cell.
         } else {
-            false // Failed to download
+            false // Genuine transport/server failure
         }
     }
 
@@ -1298,7 +1362,7 @@ class TileDownloadManager(
     private suspend fun downloadValhallaTile(
         hierarchyLevel: Int,
         tileIndex: Int,
-    ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
+    ): ValhallaFetchResult = withContext(Dispatchers.IO) {
         val url = ValhallaTileUtils.getTileUrl(
             "https://tiles.maps.murena.com/valhalla-250825", hierarchyLevel, tileIndex
         )
@@ -1308,22 +1372,25 @@ class TileDownloadManager(
         val partialFile = File(tileFile.absolutePath + ".part")
 
         try {
-            // A pending tile has no trusted database reference. Remove leftovers created by an
-            // interrupted older build so the routing engine can never read a partial .gph.
             partialFile.delete()
             if (tileFile.exists()) tileFile.delete()
 
             Log.v(TAG, "Downloading Valhalla tile $hierarchyLevel/$tileIndex from $url")
 
-            val totalBytes = httpClient.prepareGet(url).execute { response ->
-                if (response.status.value != 200) {
-                    throw Exception(
-                        "HTTP ${response.status.value}: ${response.status.description}"
+            val fetchResult = httpClient.prepareGet(url).execute { response ->
+                val status = response.status.value
+                if (status == 403 || status == 404) {
+                    return@execute ValhallaFetchResult(
+                        status = ValhallaFetchStatus.ABSENT,
+                        httpStatus = status
                     )
+                }
+                if (status != 200) {
+                    throw Exception("HTTP $status: ${response.status.description}")
                 }
 
                 val channel = response.bodyAsChannel()
-                FileOutputStream(partialFile).use { output ->
+                val totalBytes = FileOutputStream(partialFile).use { output ->
                     val buffer = ByteArray(32 * 1024)
                     var totalBytesRead = 0L
                     while (true) {
@@ -1336,28 +1403,41 @@ class TileDownloadManager(
                     output.flush()
                     totalBytesRead
                 }
+
+                if (totalBytes <= 0L) {
+                    throw Exception("Downloaded empty Valhalla tile")
+                }
+
+                if (!partialFile.renameTo(tileFile)) {
+                    partialFile.copyTo(tileFile, overwrite = true)
+                    partialFile.delete()
+                }
+
+                Log.v(
+                    TAG,
+                    "Downloaded Valhalla tile $hierarchyLevel/$tileIndex, size: $totalBytes bytes, saved atomically to: ${tileFile.absolutePath}"
+                )
+                ValhallaFetchResult(
+                    status = ValhallaFetchStatus.SUCCESS,
+                    filePath = tileFile.absolutePath,
+                    httpStatus = status
+                )
             }
 
-            if (totalBytes <= 0L) {
-                throw Exception("Downloaded empty Valhalla tile")
-            }
-
-            if (!partialFile.renameTo(tileFile)) {
-                partialFile.copyTo(tileFile, overwrite = true)
+            if (fetchResult.status == ValhallaFetchStatus.ABSENT) {
                 partialFile.delete()
+                tileFile.delete()
+                Log.v(
+                    TAG,
+                    "Valhalla graph object $hierarchyLevel/$tileIndex is not published (HTTP ${fetchResult.httpStatus})"
+                )
             }
-
-            Log.v(
-                TAG,
-                "Downloaded Valhalla tile $hierarchyLevel/$tileIndex, size: $totalBytes bytes, saved atomically to: ${tileFile.absolutePath}"
-            )
-            Pair(true, tileFile.absolutePath)
+            fetchResult
         } catch (e: Exception) {
             partialFile.delete()
-            // The final path is deliberately absent on failure.
             tileFile.delete()
             Log.e(TAG, "Error downloading Valhalla tile $hierarchyLevel/$tileIndex via HTTP", e)
-            Pair(false, null)
+            ValhallaFetchResult(status = ValhallaFetchStatus.FAILURE)
         }
     }
 
