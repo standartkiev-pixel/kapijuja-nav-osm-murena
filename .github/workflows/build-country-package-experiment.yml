@@ -19,7 +19,7 @@ on:
       - '.github/workflows/build-country-package-experiment.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: country-package-experiment-${{ github.ref }}
@@ -66,3 +66,21 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+
+      - name: Publish stable experiment download URL
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="country-packages-experiment"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Kapijuja country package experiment" \
+              --notes "Experimental one-file country packages. Not a production app release." \
+              --prerelease
+          fi
+          gh release upload "$TAG" \
+            country-package-output/Kapijuja-PL-minimal-country-package.zip \
+            country-package-output/Kapijuja-PL-minimal-country-package.zip.sha256 \
+            --clobber
