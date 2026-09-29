@@ -131,7 +131,7 @@ jobs:
           name: Kapijuja-Murena-Final-arm64-debug
           path: cardinal-android/app/build/outputs/apk/arm64/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
       - name: Upload build logs
         if: always()
@@ -143,4 +143,4 @@ jobs:
             test-arm64-debug.log
             build-arm64-debug.log
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 3
